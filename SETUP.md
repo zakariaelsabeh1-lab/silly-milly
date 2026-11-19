@@ -9,7 +9,7 @@ What it costs:
 | Vercel (hosts the app) | Free (Hobby plan) |
 | Upstash Redis (saves the calendar and bedtime history) | Free tier |
 | Open-Meteo (weather and air quality) | Free, no account |
-| Anthropic API (Claude, Silly Milly's brain) | Pay as you go. Roughly 1 to 2 cents per question. See "Keeping Claude costs down" at the end. |
+| Anthropic API (Claude, Silly Milly's brain) | Pay as you go. Well under a cent per question with Claude Haiku 5.5. See "Keeping Claude costs down" at the end. |
 | Picovoice (the "Hey Silly Milly" wake word) | Optional. Free plan for personal use. |
 
 ---
@@ -84,9 +84,7 @@ Names, bedtime times and tasks are at the top of `public/app.js` in the `CONFIG`
 
 ## Keeping Claude costs down
 
-Silly Milly uses Claude Opus 5.5 at low effort by default, which costs roughly 1 to 2 cents per question (a bit more when she searches the web). At 20 questions a day that's about $5 to $10 a month.
-
-To make it much cheaper (around 25× less) with a smaller, faster model, add an environment variable in Vercel: `MILLY_MODEL` = `claude-haiku-5-5`, then redeploy. You can also set a monthly spending limit at https://console.anthropic.com under **Limits**.
+Silly Milly uses Claude Haiku 5.5, Anthropic's fast, low-cost model. A typical question costs well under a cent. Web searches cost about 1 cent each, plus a little extra for the search results Milly reads. If you ever want a smarter (but roughly 40× pricier) brain, add an environment variable in Vercel: `MILLY_MODEL` = `claude-opus-5-5`, then redeploy. You can also set a monthly spending limit at https://console.anthropic.com under **Limits**.
 
 ## If something isn't working
 

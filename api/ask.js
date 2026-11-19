@@ -5,7 +5,12 @@ import { send, readBody, checkAuth, nowLocal, TZ } from "../lib/http.js";
 import { eventsBetween, addEvent, updateEvent, deleteEvent } from "../lib/calendar.js";
 import { recentDays } from "../lib/routine.js";
 
-const MODEL = process.env.MILLY_MODEL || "claude-opus-5-5";
+// Haiku is fast and cheap, which suits quick questions and calendar changes.
+// Set MILLY_MODEL in Vercel (e.g. "claude-opus-5-5") to use a different model.
+const MODEL = process.env.MILLY_MODEL || "claude-haiku-5-5";
+// Opus, Sonnet, Fable and Mythos models get the newer web search and refusal fallbacks;
+// Haiku uses the basic web search tool and has no server-side fallback.
+const BIG_MODEL = /^claude-(opus|sonnet|fable|mythos)-/.test(MODEL);
 const LAT = process.env.FAMILY_LAT || "53.9171";
 const LON = process.env.FAMILY_LON || "-122.7497";
 const CITY = process.env.FAMILY_CITY || "Prince George, BC";
@@ -94,7 +99,7 @@ const tools = [
     },
   },
   {
-    type: "web_search_20260209",
+    type: BIG_MODEL ? "web_search_20260209" : "web_search_20250305",
     name: "web_search",
     max_uses: 2,
     user_location: { type: "approximate", city: "Prince George", region: "British Columbia", country: "CA", timezone: TZ },
@@ -225,7 +230,7 @@ export default async function handler(req, res) {
   messages.push({ role: "user", content: text });
 
   const state = { changed: false };
-  let useFallbacks = true;
+  let useFallbacks = BIG_MODEL;
   try {
     for (let step = 0; step < 8; step++) {
       let response;

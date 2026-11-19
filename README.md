@@ -23,7 +23,7 @@ A wall-tablet dashboard for the family: big clock, Prince George weather and air
 | `ANTHROPIC_API_KEY` | yes | Claude API key for Silly Milly |
 | `FAMILY_PIN` | yes | PIN the tablet sends with every request |
 | `KV_REST_API_URL` / `KV_REST_API_TOKEN` | yes | Added automatically when you connect Upstash Redis |
-| `MILLY_MODEL` | no | Claude model, default `claude-opus-5-5` (e.g. `claude-haiku-5-5` for lower cost) |
+| `MILLY_MODEL` | no | Claude model, default `claude-haiku-5-5` (e.g. `claude-opus-5-5` for a smarter but pricier Milly) |
 | `MILLY_EFFORT` | no | `low` (default), `medium` or `high` |
 | `FAMILY_CITY`, `FAMILY_LAT`, `FAMILY_LON`, `FAMILY_TIMEZONE`, `FAMILY_KIDS` | no | Change location or names for Milly |
 
