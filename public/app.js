@@ -6,6 +6,7 @@
   "use strict";
 
   var CONFIG = {
+    familyName: "El Sabeh family", // used in the greeting
     place: "Prince George",
     lat: 53.9171,
     lon: -122.7497,
@@ -410,7 +411,7 @@
     var h = d.getHours();
     var part = h < 5 ? "night" : h < 12 ? "morning" : h < 17 ? "day" : h < 21 ? "evening" : "night";
     var hello = h < 5 ? "Sweet dreams" : h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : h < 21 ? "Good evening" : "Good night";
-    $("greeting").textContent = hello + ", " + CONFIG.kids.map(function (k) { return k.name; }).join(" & ") + "!";
+    $("greeting").textContent = hello + ", " + CONFIG.familyName + "!";
     document.body.setAttribute("data-sky", part);
   }
 
