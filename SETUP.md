@@ -1,0 +1,102 @@
+# Setting up the Family Board and Silly Milly
+
+This takes about 30 to 45 minutes the first time. You need a computer for parts 1 to 3 and the tablet for part 4.
+
+What it costs:
+
+| Thing | Cost |
+|---|---|
+| Vercel (hosts the app) | Free (Hobby plan) |
+| Upstash Redis (saves the calendar and bedtime history) | Free tier |
+| Open-Meteo (weather and air quality) | Free, no account |
+| Anthropic API (Claude, Silly Milly's brain) | Pay as you go. Roughly 1 to 2 cents per question. See "Keeping Claude costs down" at the end. |
+| Picovoice (the "Hey Silly Milly" wake word) | Optional. Free plan for personal use. |
+
+---
+
+## Part 1. Get your Claude API key
+
+1. Go to https://console.anthropic.com and sign in (or sign up).
+2. Go to **Billing** and add a small amount of credit (for example $10).
+3. Go to **API keys**, click **Create key**, name it `silly-milly`, and copy it. It starts with `sk-ant-`.
+4. Keep it somewhere safe for Part 2. Don't paste it into chats or emails.
+
+## Part 2. Put the app online with Vercel
+
+1. Go to https://vercel.com and **sign up with GitHub** (use the same GitHub account that has the `silly-milly` repository).
+2. Click **Add New… → Project**, find `silly-milly` in the list and click **Import**.
+3. Leave the settings as they are. Open **Environment Variables** and add two:
+   - `ANTHROPIC_API_KEY` = the key from Part 1
+   - `FAMILY_PIN` = a number you'll type on the tablet once, e.g. `4821`. This stops strangers who find the web address from using it.
+4. Click **Deploy**. Wait for the confetti. You now have an address like `https://silly-milly-xxxx.vercel.app`.
+
+### Add the storage (one time)
+
+1. In your Vercel project, open the **Storage** tab.
+2. Click **Create Database** (or **Browse Marketplace**), pick **Upstash** → **Upstash for Redis**, choose the **Free** plan, and pick a region close to you (e.g. *us-west*).
+3. When it asks which project to connect, choose `silly-milly` and keep all environments ticked.
+4. Go to the **Deployments** tab, click the **⋯** menu on the newest deployment and choose **Redeploy**. (This lets the app see the new storage.)
+
+Test it: open your `vercel.app` address on your computer. Tap the screen, type your PIN, and you should see the clock and weather. Try the Calendar tab and add a test event.
+
+## Part 3 (optional). The "Hey Silly Milly" wake word
+
+Without this, you tap the yellow **Milly** button to talk. With it, saying "Hey Silly Milly" opens her hands-free.
+
+1. Go to https://console.picovoice.ai and sign up (personal / non-commercial use).
+2. On the home page, copy your **AccessKey**.
+3. Go to **Porcupine** (wake word), type the phrase `Hey Silly Milly`, choose language **English**, and click **Train**.
+4. When asked for the platform, choose **Web (WASM)** and download. You'll get a zip; unzip it to get a file ending in `.ppn`.
+5. Get that `.ppn` file onto the tablet (email it to yourself, or Google Drive, then download it on the tablet).
+6. On the tablet, in the app, tap **⚙️ Settings**: paste the AccessKey, choose the `.ppn` file, and tap **Save**. The status should say *Listening for "Hey Silly Milly"*, and a small green dot appears on the Milly button.
+
+Tips: if she wakes up by accident, lower the **Sensitivity**. If she doesn't hear you from across the room, raise it. Picovoice's free plan has usage limits; if the wake word stops working one day, check your Picovoice console.
+
+## Part 4. Set up the tablet
+
+**Use Chrome, not Fully Kiosk.** The app needs Chrome's speech-to-text for Silly Milly. Fully Kiosk's built-in browser can't do that.
+
+1. **Update Chrome**: open the Play Store, search Chrome, tap **Update** if offered. Also update **Speech Services by Google**.
+2. Open Chrome and go to your `vercel.app` address.
+3. Tap Chrome's **⋮** menu → **Add to Home screen** (or **Install app**) → **Install**. A "Family" icon appears on the home screen. Always open the app from this icon: it runs full screen with no address bar.
+4. Open the Family icon, tap the screen, enter your PIN. When Chrome asks to use the **microphone**, tap **Allow** (choose "every time" or "while using the app" if asked).
+5. Tap **Milly** and ask "What's the weather tomorrow?" to test.
+
+### Keep it on the wall, awake and locked to the app
+
+- **Never sleep**: Android **Settings → Display → Screen timeout** → set the longest option. The app also asks Chrome to keep the screen on while it's open. If your tablet has **Developer options**, turn on **Stay awake** (screen stays on while charging): Settings → About tablet → tap **Build number** 7 times, then Settings → System → Developer options → **Stay awake**.
+- **Lock the kids into the app**: Settings → Security → **App pinning** (sometimes called *Pin windows* or *Screen pinning*) → turn on. Open the Family app, open Recent apps, tap the app icon at the top of its card → **Pin**. To unpin, hold **Back** and **Overview** together.
+- **Volume**: turn media volume up so Milly is loud enough across the room.
+- **Plug it in** permanently. A short right-angle USB cable looks tidiest on the wall.
+- **Battery**: some cheap tablets swell if they sit at 100% for months. If the tablet has a "Protect battery" or "Charge to 85%" option, turn it on.
+- **Night mode**: from 9:30 PM to 6 AM the screen dims to a dark clock after 5 minutes without a touch. Tap it to wake.
+
+## Daily use
+
+- **Bedtime**: at 7:30 PM the screen switches to the bedtime checklist and Milly announces it. At 7:45 she says what each child still has to do. At 8:00 she calls stories. When a list is finished, there's a celebration. **History** shows the last 14 days, with Noah's puffer in its own highlighted column. You can also ask: "Hey Silly Milly, did Noah do his puffer last night?"
+- **Calendar**: tap a day to see it, **+ Add event** to add one, tap an event to edit or delete it. Or by voice: "Hey Silly Milly, add Didi's dentist appointment next Tuesday at 3:30." Repeating events (weekly swimming, yearly birthdays) are supported.
+- **Questions**: anything you'd ask Alexa: weather, air quality, sports scores, homework help, jokes, stories.
+- If nobody touches the screen for 3 minutes, it goes back to the home screen (or the bedtime screen during bedtime).
+
+## Changing things later
+
+Names, bedtime times and tasks are at the top of `public/app.js` in the `CONFIG` block. Edit them on GitHub (open the file, click the pencil, change, **Commit changes**). Vercel redeploys automatically in about a minute; reload the app on the tablet (⚙️ Settings → Reload app).
+
+## Keeping Claude costs down
+
+Silly Milly uses Claude Opus 5.5 at low effort by default, which costs roughly 1 to 2 cents per question (a bit more when she searches the web). At 20 questions a day that's about $5 to $10 a month.
+
+To make it much cheaper (around 25× less) with a smaller, faster model, add an environment variable in Vercel: `MILLY_MODEL` = `claude-haiku-5-5`, then redeploy. You can also set a monthly spending limit at https://console.anthropic.com under **Limits**.
+
+## If something isn't working
+
+| Problem | Fix |
+|---|---|
+| "Storage isn't connected yet" | Do *Add the storage* in Part 2, then redeploy. |
+| "Add a FAMILY_PIN…" | Add the `FAMILY_PIN` variable in Vercel → Settings → Environment Variables, then redeploy. |
+| Milly says her Claude key is missing or not working | Check `ANTHROPIC_API_KEY` in Vercel and that your Anthropic account has credit. Redeploy after changing it. |
+| Milly button shows a typing box instead of listening | You're not in Chrome, or Chrome is out of date. Open the app from the Family icon made by Chrome. |
+| "I need microphone permission" | Chrome ⋮ → Settings → Site settings → Microphone → allow your vercel.app address. |
+| Wake word doesn't start | ⚙️ Settings shows the reason. Check the AccessKey, that the `.ppn` was made for **Web (WASM)**, and that the phrase was trained in English. |
+| Weather says "unavailable" | Check the tablet's Wi-Fi. |
+| Screen turns off | See "Keep it on the wall" above. |
