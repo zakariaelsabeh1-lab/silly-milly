@@ -157,6 +157,8 @@
       say("It's eight o'clock. Into bed for stories! Good night " + kidNames() + ".");
     }
     updateBedStatus();
+    renderHomeBed();
+    updateGreeting(d);
     // New day: refresh
     if (m === "00:01") { loadWeather(); loadUpcoming(); renderBedtime(); }
     // Night dimming
@@ -219,7 +221,7 @@
   function loadWeather() {
     var base = "latitude=" + CONFIG.lat + "&longitude=" + CONFIG.lon + "&timezone=" + encodeURIComponent(CONFIG.tz);
     var fUrl = "https://api.open-meteo.com/v1/forecast?" + base + "&forecast_days=8" +
-      "&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m" +
+      "&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,is_day" +
       "&daily=weather_code,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,precipitation_probability_max,snowfall_sum,uv_index_max";
     var aUrl = "https://air-quality-api.open-meteo.com/v1/air-quality?" + base + "&forecast_days=7&current=us_aqi&hourly=us_aqi";
     Promise.all([
@@ -228,13 +230,50 @@
     ]).then(function (res) { renderWeather(res[0], res[1]); })
       .catch(function () { $("now-desc").textContent = "Weather unavailable"; });
   }
+  // Weather pictures drawn as tiny SVGs, so they look the same on every device.
+  var SUN = "#FFC93C", CLOUD = "#E8EEF8", CLOUD2 = "#B9C6DA", RAIN = "#5AB4FF", SNOW = "#FFFFFF";
+  function sunSvg(cx, cy, r) {
+    var rays = "";
+    for (var i = 0; i < 8; i++) {
+      var ang = i * Math.PI / 4, x1 = cx + Math.cos(ang) * (r + 4), y1 = cy + Math.sin(ang) * (r + 4), x2 = cx + Math.cos(ang) * (r + 9), y2 = cy + Math.sin(ang) * (r + 9);
+      rays += '<line x1="' + x1.toFixed(1) + '" y1="' + y1.toFixed(1) + '" x2="' + x2.toFixed(1) + '" y2="' + y2.toFixed(1) + '"/>';
+    }
+    return '<g stroke="' + SUN + '" stroke-width="3.5" stroke-linecap="round">' + rays + '</g><circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="' + SUN + '"/>';
+  }
+  function moonSvg(cx, cy, r) {
+    return '<path d="M' + (cx + 2) + ' ' + (cy - r) + 'a' + r + ' ' + r + ' 0 1 0 ' + (r - 2) + ' ' + (r * 1.6).toFixed(1) + 'a' + (r * 0.8).toFixed(1) + ' ' + (r * 0.8).toFixed(1) + ' 0 0 1 -' + (r - 2) + ' -' + (r * 1.6).toFixed(1) + 'z" fill="#F4E7B0"/>';
+  }
+  function cloudSvg(tx, ty, sc, fill) {
+    return '<g transform="translate(' + tx + ' ' + ty + ') scale(' + sc + ')"><path d="M18 50h30a11 11 0 0 0 1.5-21.9A15 15 0 0 0 20.6 24 12 12 0 0 0 18 50z" fill="' + (fill || CLOUD) + '"/></g>';
+  }
+  function weatherSvg(code, isDay) {
+    var body = "", sky = isDay === 0 ? moonSvg(22, 22, 12) : sunSvg(22, 22, 10);
+    if (code === 0) body = isDay === 0 ? moonSvg(30, 30, 18) : sunSvg(32, 32, 14);
+    else if (code === 1) body = (isDay === 0 ? moonSvg(26, 26, 16) : sunSvg(28, 28, 13)) + cloudSvg(18, 20, 0.7);
+    else if (code === 2) body = sky + cloudSvg(6, 8, 0.95);
+    else if (code === 3) body = cloudSvg(-6, -2, 0.85, CLOUD2) + cloudSvg(4, 6, 1);
+    else if (code === 45 || code === 48) body = cloudSvg(2, -6, 0.95, CLOUD2) + '<g stroke="' + CLOUD + '" stroke-width="4" stroke-linecap="round"><line x1="10" y1="48" x2="54" y2="48"/><line x1="16" y1="57" x2="48" y2="57"/></g>';
+    else if (code >= 95) body = cloudSvg(2, -6, 0.95, CLOUD2) + '<path d="M34 38l-9 13h7l-4 11 12-15h-7l5-9z" fill="' + SUN + '"/>';
+    else if ((code >= 71 && code <= 77) || code === 85 || code === 86) {
+      body = cloudSvg(2, -8, 0.95);
+      [[20, 50], [32, 56], [44, 50], [26, 60], [40, 61]].forEach(function (p) { body += '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="3.2" fill="' + SNOW + '"/>'; });
+    } else if (code >= 51) {
+      var heavy = code === 55 || code === 65 || code === 82 || code === 63 || code === 81;
+      body = (code >= 80 ? sky : "") + cloudSvg(2, -8, 0.95, code >= 61 ? CLOUD2 : CLOUD) + '<g stroke="' + RAIN + '" stroke-width="3.5" stroke-linecap="round">' +
+        '<line x1="22" y1="48" x2="18" y2="57"/><line x1="34" y1="48" x2="30" y2="57"/>' + (heavy || code < 60 ? '<line x1="46" y1="48" x2="42" y2="57"/>' : "") + "</g>";
+    } else body = cloudSvg(4, 4, 1);
+    return '<svg viewBox="0 0 64 64" aria-hidden="true">' + body + "</svg>";
+  }
+
+  var lastDayAqi = {};
   function renderWeather(f, a) {
     if (!f || !f.current) return;
-    var c = f.current, w = wmo(c.weather_code);
-    $("now-icon").textContent = w[0];
+    var c = f.current, w = wmo(c.weather_code), d = f.daily;
+    $("now-icon").innerHTML = weatherSvg(c.weather_code, c.is_day);
     $("now-temp").textContent = Math.round(c.temperature_2m) + "°C";
     $("now-desc").textContent = w[1] + " in " + CONFIG.place;
     $("now-feels").textContent = "Feels like " + Math.round(c.apparent_temperature) + "° · Wind " + Math.round(c.wind_speed_10m) + " km/h";
+    $("now-hilo").innerHTML = "H " + Math.round(d.temperature_2m_max[0]) + "° <span>L " + Math.round(d.temperature_2m_min[0]) + "°</span>";
 
     var dayAqi = {};
     if (a && a.hourly) {
@@ -243,66 +282,136 @@
         if (v != null) dayAqi[dd] = Math.max(dayAqi[dd] || 0, v);
       }
     }
+    lastDayAqi = dayAqi;
     var nowAqi = a && a.current ? a.current.us_aqi : null;
     var chip = aqiChip(nowAqi, false);
     var old = $("now-aqi"); chip.id = "now-aqi"; old.parentNode.replaceChild(chip, old);
 
     var week = $("week"); week.innerHTML = "";
-    var d = f.daily;
     for (var k = 0; k < d.time.length && k < 8; k++) {
       var date = parseYmd(d.time[k]);
-      var card = el("div", "day-card" + (k === 0 ? " today" : ""));
+      var card = el("div", "card day-card" + (k === 0 ? " today" : ""));
       card.appendChild(el("div", "day-name", k === 0 ? "Today" : DAYS[date.getDay()]));
-      card.appendChild(el("div", "day-icon", wmo(d.weather_code[k])[0]));
+      var ic = el("div", "day-icon"); ic.innerHTML = weatherSvg(d.weather_code[k], 1); card.appendChild(ic);
       var t = el("div", "day-temps");
-      t.innerHTML = "<b>" + Math.round(d.temperature_2m_max[k]) + "°</b> " + Math.round(d.temperature_2m_min[k]) + "°";
+      t.innerHTML = "<b>" + Math.round(d.temperature_2m_max[k]) + "°</b> <span>" + Math.round(d.temperature_2m_min[k]) + "°</span>";
       card.appendChild(t);
       var pop = d.precipitation_probability_max[k];
-      card.appendChild(el("div", "day-pop", pop != null && pop >= 20 ? "💧" + pop + "%" : ""));
+      card.appendChild(el("div", "day-pop", pop != null && pop >= 20 ? pop + "% " + (d.snowfall_sum[k] > 0 ? "snow" : "rain") : ""));
       card.appendChild(aqiChip(dayAqi[d.time[k]], true));
       week.appendChild(card);
     }
-    $("wear").textContent = wearTip({
+    $("wear").innerHTML = "<b>What to wear:</b> " + wearTip({
       feelsMin: d.apparent_temperature_min[0], feelsMax: d.apparent_temperature_max[0],
       pop: d.precipitation_probability_max[0] || 0, snow: d.snowfall_sum[0] || 0, uv: d.uv_index_max[0] || 0
     }, nowAqi, dayAqi[d.time[0]]);
+    renderAqWeek(d.time.slice(0, 7), dayAqi);
   }
 
-  // ---------- upcoming events (home) ----------
+  function renderAqWeek(dates, dayAqi) {
+    var box = $("aq-week"); box.innerHTML = "";
+    var bad = [];
+    dates.forEach(function (ds, i) {
+      var v = dayAqi[ds], lv = aqiLevel(v);
+      var col = el("div", "aq-col");
+      col.appendChild(el("div", "aq-val", v == null ? "–" : String(Math.round(v))));
+      var bar = el("div", "aq-bar" + (lv ? " aqi-" + lv.n : ""));
+      bar.style.height = v == null ? "8px" : Math.max(10, Math.min(v, 200) / 200 * 100) + "%";
+      col.appendChild(bar);
+      col.appendChild(el("div", "aq-day", i === 0 ? "Tdy" : DAYS[parseYmd(ds).getDay()]));
+      box.appendChild(col);
+      if (v != null && v > 100) bad.push(i === 0 ? "today" : DAYS_LONG[parseYmd(ds).getDay()]);
+    });
+    var known = dates.filter(function (ds) { return dayAqi[ds] != null; }).length;
+    $("aq-note").textContent = !known ? "No air quality forecast right now." :
+      bad.length ? "Smoky or poor air " + (bad.length > 2 ? "most of the week" : bad.join(" and ")) + ". Keep outdoor play short, especially for Noah." :
+      "Good to moderate air all week. 🌲";
+  }
+
+  // ---------- events on the home screen ----------
   function eventColor(who) {
     for (var i = 0; i < CONFIG.kids.length; i++) if (CONFIG.kids[i].name === who) return CONFIG.kids[i].color;
     return who === "Parents" ? "#b18cff" : "#ffd166";
   }
   function whenText(e) {
-    var today = parseYmd(ymd(new Date()));
+    var todayD = parseYmd(ymd(new Date()));
     var day = parseYmd(e.occurrence);
-    var diff = Math.round((day - today) / 86400000);
+    var diff = Math.round((day - todayD) / 86400000);
     var label = diff === 0 ? "Today" : diff === 1 ? "Tomorrow" : DAYS_LONG[day.getDay()] + ", " + MONTHS[day.getMonth()].slice(0, 3) + " " + day.getDate();
     return { label: label + (e.start ? " · " + to12(e.start) : ""), diff: diff };
   }
+  function agendaItem(e, showDay) {
+    var w = whenText(e);
+    var it = el("div", "agenda-item");
+    var bar = el("div", "agenda-bar"); bar.style.background = eventColor(e.who); it.appendChild(bar);
+    var txt = el("div");
+    var when = showDay ? w.label : (e.start ? to12(e.start) + (e.end ? " – " + to12(e.end) : "") : "All day");
+    txt.appendChild(el("div", "agenda-when", when + (e.who && e.who !== "Everyone" ? " · " + e.who : "")));
+    txt.appendChild(el("div", "agenda-title", e.title));
+    if (showDay && w.diff >= 2) txt.appendChild(el("div", "agenda-count", w.diff + " sleeps to go"));
+    it.appendChild(txt);
+    return it;
+  }
   function loadUpcoming() {
     var s = new Date();
-    api("/api/events?start=" + ymd(s) + "&end=" + ymd(addDays(s, 45))).then(function (r) {
-      var list = $("upcoming-list"); list.innerHTML = "";
-      var nowT = hm(new Date()), todayS = ymd(new Date());
+    api("/api/events?start=" + ymd(s) + "&end=" + ymd(addDays(s, 60))).then(function (r) {
+      var todayS = ymd(new Date()), nowT = hm(new Date());
+      var tList = $("today-list"), uList = $("upcoming-list");
+      tList.innerHTML = ""; uList.innerHTML = "";
+      var todays = r.events.filter(function (e) { return e.occurrence === todayS; });
+      var later = todays.filter(function (e) { return !(e.start && (e.end || e.start) < nowT); });
+      if (!todays.length) tList.appendChild(el("div", "tile-empty", "Nothing planned today. 🎈"));
+      else if (!later.length) tList.appendChild(el("div", "tile-empty", "All done for today! ✅"));
+      later.slice(0, 4).forEach(function (e) { tList.appendChild(agendaItem(e, false)); });
+      if (later.length > 4) tList.appendChild(el("div", "agenda-when", "+" + (later.length - 4) + " more"));
+
       var seen = {};
-      var items = r.events.filter(function (e) {
-        if (e.occurrence === todayS && e.start && (e.end || e.start) < nowT) return false; // already over today
-        if (seen[e.id]) return false; // show a repeating event only once (its next time)
-        seen[e.id] = true;
-        return true;
-      }).slice(0, 6);
-      if (!items.length) { list.appendChild(el("div", "muted", "Nothing coming up. Say \"Hey Silly Milly, add swimming on Saturday at 10\".")); return; }
-      items.forEach(function (e) {
-        var w = whenText(e);
-        var it = el("div", "up-item");
-        it.style.borderLeftColor = eventColor(e.who);
-        it.appendChild(el("div", "up-when", w.label + (e.who && e.who !== "Everyone" ? " · " + e.who : "")));
-        it.appendChild(el("div", "up-title", e.title));
-        if (w.diff >= 2) it.appendChild(el("div", "up-count", w.diff + " sleeps to go"));
-        list.appendChild(it);
+      var next = r.events.filter(function (e) {
+        if (e.occurrence === todayS || seen[e.id]) return false; // a repeating event shows once, at its next time
+        seen[e.id] = true; return true;
       });
+      if (!next.length) uList.appendChild(el("div", "tile-empty", "Nothing yet. Try: “Hey Silly Milly, add swimming on Saturday at 10.”"));
+      next.slice(0, 4).forEach(function (e) { uList.appendChild(agendaItem(e, true)); });
     }).catch(function () {});
+  }
+
+  // ---------- bedtime on the home screen ----------
+  function ringSvg(done, total, color) {
+    var r = 26, c = 2 * Math.PI * r, pct = total ? done / total : 0;
+    return '<svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="' + r + '" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="8"/>' +
+      (pct <= 0 ? "</svg>" : '<circle cx="32" cy="32" r="' + r + '" fill="none" stroke="' + (pct >= 1 ? "#3ccf7a" : color) + '" stroke-width="8" stroke-linecap="round" stroke-dasharray="' + (c * pct).toFixed(1) + " " + c.toFixed(1) + '"/></svg>');
+  }
+  function renderHomeBed() {
+    var box = $("home-bed"); if (!box) return;
+    box.innerHTML = "";
+    var t = hm(new Date()), bt = CONFIG.bedtime;
+    var when;
+    if (t >= "05:00" && t < bt.start) {
+      var m = minutesUntil(bt.start), hh = Math.floor(m / 60), mm = m % 60;
+      when = "Starts at " + to12(bt.start) + " · in " + (hh ? hh + " h " : "") + mm + " min";
+    } else if (t >= bt.start && t < bt.bed) when = "Bed and stories at " + to12(bt.bed) + " · " + minutesUntil(bt.bed) + " min";
+    else when = "Sleep tight! 🌙";
+    box.appendChild(el("div", "hb-when", when));
+    CONFIG.kids.forEach(function (kid) {
+      var tasks = tasksFor(kid), done = today[kid.id] || {};
+      var n = tasks.filter(function (x) { return done[x.id]; }).length;
+      var row = el("div", "hb-kid");
+      var ring = el("div", "hb-ring"); ring.innerHTML = ringSvg(n, tasks.length, kid.color); row.appendChild(ring);
+      var txt = el("div");
+      txt.appendChild(el("div", "hb-name", kid.name));
+      txt.appendChild(el("div", "hb-sub", n === tasks.length ? "All done! ⭐" : n + " of " + tasks.length + " done"));
+      row.appendChild(txt);
+      box.appendChild(row);
+    });
+  }
+
+  // Greeting and background colour change with the time of day
+  function updateGreeting(d) {
+    var h = d.getHours();
+    var part = h < 5 ? "night" : h < 12 ? "morning" : h < 17 ? "day" : h < 21 ? "evening" : "night";
+    var hello = h < 5 ? "Sweet dreams" : h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : h < 21 ? "Good evening" : "Good night";
+    $("greeting").textContent = hello + ", " + CONFIG.kids.map(function (k) { return k.name; }).join(" & ") + "!";
+    document.body.setAttribute("data-sky", part);
   }
 
   // ---------- bedtime ----------
@@ -356,6 +465,7 @@
       wrap.appendChild(col);
     });
     updateBedStatus();
+    renderHomeBed();
   }
   function updateBedStatus() {
     var t = hm(new Date()), bt = CONFIG.bedtime, s;
@@ -787,6 +897,10 @@
     var navs = document.querySelectorAll(".nav-btn");
     for (var i = 0; i < navs.length; i++) {
       (function (b) { b.onclick = function () { showView(b.getAttribute("data-view")); }; })(navs[i]);
+    }
+    var tiles = document.querySelectorAll("[data-go]");
+    for (var ti = 0; ti < tiles.length; ti++) {
+      (function (b) { b.onclick = function () { showView(b.getAttribute("data-go")); }; })(tiles[ti]);
     }
     $("bed-history-btn").onclick = function () { showView("history"); };
     $("history-back").onclick = function () { showView("bedtime"); };

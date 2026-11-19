@@ -30,31 +30,50 @@
 
   <main>
     <!-- HOME -->
-    <section id="view-home" class="view active">
-      <div class="home-top">
-        <div class="clock-box">
-          <div id="clock" class="clock">--:--</div>
-          <div id="date" class="date"></div>
-        </div>
-        <div class="now-box">
-          <div class="now-main">
-            <span id="now-icon" class="now-icon">⏳</span>
-            <div>
-              <div id="now-temp" class="now-temp">--°</div>
-              <div id="now-desc" class="now-desc">Loading weather…</div>
-            </div>
-          </div>
-          <div class="now-row">
-            <span id="now-aqi" class="aqi-chip">Air –</span>
-            <span id="now-feels" class="muted"></span>
-          </div>
-          <div id="wear" class="wear"></div>
-        </div>
+    <section id="view-home" class="view active home">
+      <div class="h-clock card-flat">
+        <div id="greeting" class="greeting">Hello!</div>
+        <div id="clock" class="clock">--:--</div>
+        <div id="date" class="date"></div>
+        <div class="milly-hint">Say <b>“Hey Silly Milly”</b> or tap <b>Milly</b> to ask anything</div>
       </div>
+
+      <div id="h-now" class="h-now card">
+        <div class="now-main">
+          <div id="now-icon" class="now-icon"></div>
+          <div class="now-text">
+            <div id="now-temp" class="now-temp">--°</div>
+            <div id="now-desc" class="now-desc">Loading weather…</div>
+            <div id="now-feels" class="now-feels"></div>
+          </div>
+          <div class="now-side">
+            <div id="now-hilo" class="now-hilo"></div>
+            <span id="now-aqi" class="aqi-chip">Air –</span>
+          </div>
+        </div>
+        <div id="wear" class="wear"></div>
+      </div>
+
       <div id="week" class="week"></div>
-      <div class="upcoming">
-        <div class="section-title">Coming up</div>
-        <div id="upcoming-list" class="upcoming-list"><div class="muted">Nothing yet. Say "Hey Silly Milly, add…"</div></div>
+
+      <div class="h-bottom">
+        <button class="card tile" data-go="calendar">
+          <div class="tile-title"><span class="tile-dot" style="background:#ffd166"></span>Today</div>
+          <div id="today-list" class="tile-body"></div>
+        </button>
+        <button class="card tile" data-go="calendar">
+          <div class="tile-title"><span class="tile-dot" style="background:#8fd3ff"></span>Coming up</div>
+          <div id="upcoming-list" class="tile-body"></div>
+        </button>
+        <button class="card tile" data-go="bedtime">
+          <div class="tile-title"><span class="tile-dot" style="background:#b18cff"></span>Bedtime tonight</div>
+          <div id="home-bed" class="tile-body home-bed"></div>
+        </button>
+        <div class="card tile">
+          <div class="tile-title"><span class="tile-dot" style="background:#3ccf7a"></span>Air quality</div>
+          <div id="aq-week" class="tile-body aq-week"></div>
+          <div id="aq-note" class="aq-note muted"></div>
+        </div>
       </div>
     </section>
 
