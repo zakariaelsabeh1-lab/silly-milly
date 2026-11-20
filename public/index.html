@@ -22,6 +22,7 @@
 
   <nav class="nav">
     <button data-view="home" class="nav-btn active"><span>🏠</span>Home</button>
+    <button data-view="morning" class="nav-btn"><span>☀️</span>Morning</button>
     <button data-view="bedtime" class="nav-btn"><span>🛏️</span>Bedtime</button>
     <button data-view="calendar" class="nav-btn"><span>📅</span>Calendar</button>
     <div class="nav-spacer"></div>
@@ -65,8 +66,8 @@
           <div class="tile-title"><span class="tile-dot" style="background:#8fd3ff"></span>Coming up</div>
           <div id="upcoming-list" class="tile-body"></div>
         </button>
-        <button class="card tile" data-go="bedtime">
-          <div class="tile-title"><span class="tile-dot" style="background:#b18cff"></span>Bedtime tonight</div>
+        <button id="routine-tile" class="card tile" data-go="bedtime">
+          <div class="tile-title"><span class="tile-dot" style="background:#b18cff"></span><span id="routine-tile-title">Bedtime tonight</span></div>
           <div id="home-bed" class="tile-body home-bed"></div>
         </button>
         <div class="card tile">
@@ -77,6 +78,20 @@
       </div>
     </section>
 
+    <!-- MORNING -->
+    <section id="view-morning" class="view">
+      <div class="bed-head">
+        <div>
+          <div class="bed-title">Good morning! ☀️</div>
+          <div id="morning-status" class="bed-status"></div>
+        </div>
+        <div class="bed-times" id="morning-times"></div>
+        <button id="morning-history-btn" class="ghost-btn">History</button>
+      </div>
+      <div id="morning-values" class="values-banner"></div>
+      <div id="morning-columns" class="bed-columns"></div>
+    </section>
+
     <!-- BEDTIME -->
     <section id="view-bedtime" class="view">
       <div class="bed-head">
@@ -84,20 +99,17 @@
           <div class="bed-title">Bedtime</div>
           <div id="bed-status" class="bed-status"></div>
         </div>
-        <div class="bed-times">
-          <span class="time-pill">7:30 Get ready</span>
-          <span class="time-pill">7:45 Reminder</span>
-          <span class="time-pill">8:00 Stories 📚</span>
-        </div>
+        <div class="bed-times" id="bedtime-times"></div>
         <button id="bed-history-btn" class="ghost-btn">History</button>
       </div>
+      <div id="bedtime-values" class="values-banner"></div>
       <div id="bed-columns" class="bed-columns"></div>
     </section>
 
     <!-- HISTORY -->
     <section id="view-history" class="view">
       <div class="bed-head">
-        <div class="bed-title">Bedtime history</div>
+        <div id="history-title" class="bed-title">Bedtime history</div>
         <button id="history-back" class="ghost-btn">Back</button>
       </div>
       <div id="history-table" class="history"></div>

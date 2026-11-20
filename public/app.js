@@ -33,6 +33,41 @@
         { id: "ready", label: "Ready for tomorrow", icon: "🎒" }
       ]
     },
+    morning: {
+      start: "07:00",    // switch to the morning screen (school and daycare days, Mon-Fri)
+      remind: "07:30",   // spoken reminder
+      leave: "08:00",    // time to go
+      showUntil: "09:00",
+      weekdaysOnly: true, // auto-show and speak only Monday to Friday
+      tasks: [
+        { id: "toilet", label: "Use the toilet", icon: "🚽" },
+        { id: "puffer", label: "Puffer", icon: "💨", only: ["noah"] },
+        { id: "vitamins", label: "Vitamins", icon: "💊" },
+        { id: "teeth", label: "Brush teeth", icon: "🦷" },
+        { id: "dressed", label: "Put clothes on", icon: "👕" },
+        { id: "breakfast", label: "Eat breakfast", icon: "🥣" },
+        { id: "ready", label: "Ready to go", icon: "🎒", labels: { noah: "Ready for school", didi: "Ready for daycare" }, icons: { didi: "🧸" } }
+      ]
+    },
+    // Kind-heart reminders, shown on the morning and bedtime screens and said out loud. One per day.
+    values: {
+      morning: [
+        "Today, be kind, use your good manners, and listen to your parents and your teachers.",
+        "Say please and thank you, be a good friend, and listen to your teachers today.",
+        "Be gentle and kind to everyone, and listen to your parents and your teachers.",
+        "Use your good manners today, help someone out, and be a good listener.",
+        "Be a good person today: share, take turns, and listen to your teachers.",
+        "Remember: kind words, good manners, and listening ears all day long."
+      ],
+      bedtime: [
+        "Thank you for being kind today. Tomorrow, let's use good manners and listen to our parents and teachers again.",
+        "Did you help someone today? Being kind and listening makes everyone happy. Sweet dreams.",
+        "Good people say sorry, say thank you, and listen. You can do all of those tomorrow too.",
+        "Being kind and having good manners is the best thing you can do. Proud of you.",
+        "Tomorrow is a new day to be a good friend, use your manners, and listen to your teachers.",
+        "Kind hearts, good manners, and listening ears. Rest up for another great day."
+      ]
+    },
     who: ["Everyone", "Noah", "Didi", "Parents"],
     nightDim: { from: "21:30", to: "06:00" },
     idleMinutes: 3
@@ -148,16 +183,19 @@
     var btns = document.querySelectorAll(".nav-btn");
     for (var j = 0; j < btns.length; j++) {
       var v = btns[j].getAttribute("data-view");
-      btns[j].classList.toggle("active", v === name || (name === "history" && v === "bedtime"));
+      btns[j].classList.toggle("active", v === name || (name === "history" && v === historyRoutine));
     }
-    if (name === "bedtime") renderBedtime();
+    if (name === "bedtime" || name === "morning") renderBedtime();
     if (name === "calendar") loadMonth();
     if (name === "history") loadHistory();
     if (name === "settings") renderSettings();
   }
+  function morningDay() { var d = now().getDay(); return !CONFIG.morning.weekdaysOnly || (d >= 1 && d <= 5); }
   function defaultView() {
     var t = hm(now());
-    return between(t, CONFIG.bedtime.start, CONFIG.bedtime.showUntil) ? "bedtime" : "home";
+    if (between(t, CONFIG.bedtime.start, CONFIG.bedtime.showUntil)) return "bedtime";
+    if (morningDay() && between(t, CONFIG.morning.start, CONFIG.morning.showUntil)) return "morning";
+    return "home";
   }
 
   // ---------- clock ----------
@@ -182,16 +220,30 @@
       say("Time to get ready for bed, " + kidNames() + "! Let's do the checklist.");
     } else if (m === bt.remind) {
       showView("bedtime"); chime();
-      say("Fifteen minutes until bed! " + whatsLeftSentence());
+      say("Fifteen minutes until bed! " + whatsLeftSentence("bedtime"));
     } else if (m === bt.bed) {
       showView("bedtime"); chime();
-      say("It's eight o'clock. Into bed for stories! Good night " + kidNames() + ".");
+      say("It's eight o'clock. Into bed for stories! " + valuesLine("bedtime") + " Good night " + kidNames() + ".");
+    }
+    // Morning schedule (school and daycare days)
+    var mo = CONFIG.morning;
+    if (morningDay()) {
+      if (m === mo.start) {
+        showView("morning"); chime();
+        say("Good morning " + kidNames() + "! Time to get ready. " + valuesLine("morning"));
+      } else if (m === mo.remind) {
+        showView("morning"); chime();
+        say("Half an hour until it's time to go! " + whatsLeftSentence("morning"));
+      } else if (m === mo.leave) {
+        showView("morning"); chime();
+        say("Time to go! Noah, off to school. Didi, off to daycare. Have a great day, and remember your good manners!");
+      }
     }
     updateBedStatus();
     renderHomeBed();
     updateGreeting(d);
     // New day: refresh
-    if (m === "00:01") { loadWeather(); loadUpcoming(); renderBedtime(); }
+    if (m === "00:01") { loadWeather(); loadUpcoming(); loadToday(); }
     // Night dimming
     var night = between(m, CONFIG.nightDim.from, CONFIG.nightDim.to);
     if (!night) dimmedByUser = false;
@@ -204,7 +256,7 @@
       if (currentView !== dv) showView(dv);
     }
     if (d.getMinutes() % 30 === 0) loadWeather();
-    if (d.getMinutes() % 5 === 0) { loadUpcoming(); if (currentView === "bedtime") loadToday(); }
+    if (d.getMinutes() % 5 === 0) { loadUpcoming(); if (currentView === "bedtime" || currentView === "morning") loadToday(); }
   }
 
   // ---------- weather ----------
@@ -413,19 +465,27 @@
     return '<svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="' + r + '" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="8"/>' +
       (pct <= 0 ? "</svg>" : '<circle cx="32" cy="32" r="' + r + '" fill="none" stroke="' + (pct >= 1 ? "#3ccf7a" : color) + '" stroke-width="8" stroke-linecap="round" stroke-dasharray="' + (c * pct).toFixed(1) + " " + c.toFixed(1) + '"/></svg>');
   }
+  // Home tile: the morning routine until noon (on school days), then tonight's bedtime.
   function renderHomeBed() {
     var box = $("home-bed"); if (!box) return;
     box.innerHTML = "";
-    var t = hm(now()), bt = CONFIG.bedtime;
+    var t = hm(now()), bt = CONFIG.bedtime, mo = CONFIG.morning;
+    var name = morningDay() && t >= "05:00" && t < "12:00" ? "morning" : "bedtime";
+    $("routine-tile").setAttribute("data-go", name);
+    $("routine-tile-title").textContent = name === "morning" ? "Morning routine" : "Bedtime tonight";
     var when;
-    if (t >= "05:00" && t < bt.start) {
+    if (name === "morning") {
+      if (t < mo.start) when = "Starts at " + to12(mo.start);
+      else if (t < mo.leave) when = "Time to go at " + to12(mo.leave) + " · " + minutesUntil(mo.leave) + " min";
+      else when = "Have a great day! ☀️";
+    } else if (t >= "05:00" && t < bt.start) {
       var m = minutesUntil(bt.start), hh = Math.floor(m / 60), mm = m % 60;
       when = "Starts at " + to12(bt.start) + " · in " + (hh ? hh + " h " : "") + mm + " min";
     } else if (t >= bt.start && t < bt.bed) when = "Bed and stories at " + to12(bt.bed) + " · " + minutesUntil(bt.bed) + " min";
     else when = "Sleep tight! 🌙";
     box.appendChild(el("div", "hb-when", when));
     CONFIG.kids.forEach(function (kid) {
-      var tasks = tasksFor(kid), done = today[kid.id] || {};
+      var tasks = tasksFor(kid, name), done = state[name][kid.id] || {};
       var n = tasks.filter(function (x) { return done[x.id]; }).length;
       var row = el("div", "hb-kid");
       var ring = el("div", "hb-ring"); ring.innerHTML = ringSvg(n, tasks.length, kid.color); row.appendChild(ring);
@@ -446,40 +506,51 @@
     document.body.setAttribute("data-sky", part);
   }
 
-  // ---------- bedtime ----------
-  var today = {}; // { noah: {toilet:"19:32"}, didi: {...} }
+  // ---------- morning and bedtime checklists ----------
+  var state = { bedtime: {}, morning: {} }; // { noah: {toilet:"19:32"}, didi: {...} } for today
   var celebrated = {};
-  function tasksFor(kid) {
-    return CONFIG.bedtime.tasks.filter(function (t) { return !t.only || t.only.indexOf(kid.id) >= 0; });
+  var historyRoutine = "bedtime";
+  var COLS = { bedtime: "bed-columns", morning: "morning-columns" };
+  function tasksFor(kid, name) {
+    return CONFIG[name || "bedtime"].tasks.filter(function (t) { return !t.only || t.only.indexOf(kid.id) >= 0; }).map(function (t) {
+      return { id: t.id, label: (t.labels && t.labels[kid.id]) || t.label, icon: (t.icons && t.icons[kid.id]) || t.icon };
+    });
   }
   function kidNames() { return CONFIG.kids.map(function (k) { return k.name; }).join(" and "); }
-  function leftFor(kid) {
-    var done = today[kid.id] || {};
-    return tasksFor(kid).filter(function (t) { return !done[t.id]; });
+  function leftFor(kid, name) {
+    var done = state[name][kid.id] || {};
+    return tasksFor(kid, name).filter(function (t) { return !done[t.id]; });
   }
-  function whatsLeftSentence() {
+  function whatsLeftSentence(name) {
     var parts = [];
     CONFIG.kids.forEach(function (k) {
-      var left = leftFor(k);
+      var left = leftFor(k, name);
       if (!left.length) parts.push(k.name + " is all done, great job!");
       else parts.push(k.name + " still needs: " + left.map(function (t) { return t.label.toLowerCase(); }).join(", ") + ".");
     });
     return parts.join(" ");
   }
+  function valuesLine(name) {
+    var list = CONFIG.values[name], d = now();
+    var day = Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 86400000);
+    return list[day % list.length];
+  }
   function loadToday() {
     var key = ymd(now());
-    return api("/api/bedtime?days=1").then(function (r) {
-      today = (r.days && r.days[key]) || {};
-      CONFIG.kids.forEach(function (k) { if (!leftFor(k).length) celebrated[key + k.id] = true; });
-      renderBedtime();
-    }).catch(function () {});
+    return Promise.all(["bedtime", "morning"].map(function (name) {
+      return api("/api/bedtime?days=1&routine=" + name).then(function (r) {
+        state[name] = (r.days && r.days[key]) || {};
+        CONFIG.kids.forEach(function (k) { if (!leftFor(k, name).length) celebrated[name + key + k.id] = true; });
+      });
+    })).then(renderBedtime).catch(function () {});
   }
-  function renderBedtime() {
-    var wrap = $("bed-columns"); wrap.innerHTML = "";
+  function renderBedtime() { renderRoutine("morning"); renderRoutine("bedtime"); updateBedStatus(); renderHomeBed(); }
+  function renderRoutine(name) {
+    var wrap = $(COLS[name]); wrap.innerHTML = "";
     CONFIG.kids.forEach(function (kid) {
       var col = el("div", "kid-col");
       col.style.setProperty("--kid", kid.color);
-      var tasks = tasksFor(kid), done = today[kid.id] || {};
+      var tasks = tasksFor(kid, name), done = state[name][kid.id] || {};
       var count = tasks.filter(function (t) { return done[t.id]; }).length;
       if (count === tasks.length) col.classList.add("all-done");
       var head = el("div", "kid-head");
@@ -491,52 +562,71 @@
         b.appendChild(el("span", "task-icon", t.icon));
         b.appendChild(el("span", "task-label", t.label));
         b.appendChild(el("span", "task-check", "✓"));
-        b.onclick = function () { toggleTask(kid, t); };
+        b.onclick = function () { toggleTask(kid, t, name); };
         col.appendChild(b);
       });
       wrap.appendChild(col);
     });
-    updateBedStatus();
-    renderHomeBed();
+    var vb = $(name + "-values"); vb.innerHTML = "";
+    vb.appendChild(el("span", "vb-icon", name === "morning" ? "💛" : "🌟"));
+    vb.appendChild(el("span", null, valuesLine(name)));
   }
+  function pills(id, list, idx) {
+    var box = $(id); box.innerHTML = "";
+    list.forEach(function (p, i) { box.appendChild(el("span", "time-pill" + (i === idx ? " now" : ""), p)); });
+  }
+  function short12(t) { return to12(t).replace(/ (AM|PM)$/, ""); }
   function updateBedStatus() {
-    var t = hm(now()), bt = CONFIG.bedtime, s;
+    var t = hm(now()), bt = CONFIG.bedtime, mo = CONFIG.morning, s;
     if (t < bt.start && t >= "12:00") s = "Bedtime routine starts at " + to12(bt.start);
     else if (t >= bt.start && t < bt.remind) s = "Getting ready for bed";
     else if (t >= bt.remind && t < bt.bed) s = "Almost bedtime! " + (Math.max(0, minutesUntil(bt.bed))) + " minutes left";
     else if (t >= bt.bed && t < "23:59") s = "In bed for stories 📚";
     else s = "Good morning!";
     $("bed-status").textContent = s;
-    var pills = document.querySelectorAll(".time-pill");
-    var idx = t >= bt.bed ? 2 : t >= bt.remind ? 1 : t >= bt.start ? 0 : -1;
-    for (var i = 0; i < pills.length; i++) pills[i].classList.toggle("now", i === idx);
+    pills("bedtime-times", [short12(bt.start) + " Get ready", short12(bt.remind) + " Reminder", short12(bt.bed) + " Stories 📚"],
+      t >= bt.bed ? 2 : t >= bt.remind ? 1 : t >= bt.start ? 0 : -1);
+    var m;
+    if (t < mo.start) m = "Getting ready starts at " + to12(mo.start);
+    else if (t < mo.remind) m = "Let's get ready! " + minutesUntil(mo.leave) + " minutes until it's time to go";
+    else if (t < mo.leave) m = "Hurry hurry! " + minutesUntil(mo.leave) + " minutes left";
+    else if (t < "12:00") m = "Off to school and daycare! 🚗";
+    else m = "See you tomorrow morning!";
+    $("morning-status").textContent = m;
+    pills("morning-times", [short12(mo.start) + " Get ready", short12(mo.remind) + " Reminder", short12(mo.leave) + " Time to go 🚗"],
+      t >= "12:00" ? -1 : t >= mo.leave ? 2 : t >= mo.remind ? 1 : t >= mo.start ? 0 : -1);
   }
   function minutesUntil(t) {
     var n = now(), p = t.split(":");
     return (+p[0] * 60 + +p[1]) - (n.getHours() * 60 + n.getMinutes());
   }
-  function toggleTask(kid, t) {
+  function toggleTask(kid, t, name) {
     var key = ymd(now());
-    var done = today[kid.id] = today[kid.id] || {};
+    var done = state[name][kid.id] = state[name][kid.id] || {};
     var on = !done[t.id];
     if (on) done[t.id] = hm(now()); else delete done[t.id];
     renderBedtime();
     if (on) blip();
-    api("/api/bedtime", { method: "POST", body: { date: key, kid: kid.id, task: t.id, done: on, time: hm(now()) } })
+    api("/api/bedtime", { method: "POST", body: { date: key, kid: kid.id, task: t.id, done: on, time: hm(now()), routine: name } })
       .catch(function () { /* will resync on next load */ });
-    if (on && !leftFor(kid).length && !celebrated[key + kid.id]) {
-      celebrated[key + kid.id] = true;
-      celebrate(kid.name + " is ready for bed! 🎉", kid.name + " is all done! Amazing job, " + kid.name + "!");
+    if (on && !leftFor(kid, name).length && !celebrated[name + key + kid.id]) {
+      celebrated[name + key + kid.id] = true;
+      if (name === "morning") {
+        var place = kid.id === "didi" ? "daycare" : "school";
+        celebrate(kid.name + " is ready for " + place + "! 🎉", kid.name + " is all ready for " + place + "! Awesome job, " + kid.name + "! Have a great day.");
+      } else celebrate(kid.name + " is ready for bed! 🎉", kid.name + " is all done! Amazing job, " + kid.name + "!");
     }
   }
   function loadHistory() {
-    api("/api/bedtime?days=14").then(function (r) {
+    var name = historyRoutine;
+    $("history-title").textContent = name === "morning" ? "Morning history" : "Bedtime history";
+    api("/api/bedtime?days=14&routine=" + name).then(function (r) {
       var box = $("history-table"); box.innerHTML = "";
       var table = el("table"), thead = el("tr");
       thead.appendChild(el("th", null, "Day"));
       var cols = [];
       CONFIG.kids.forEach(function (k) {
-        tasksFor(k).forEach(function (t) { cols.push({ kid: k, task: t }); });
+        tasksFor(k, name).forEach(function (t) { cols.push({ kid: k, task: t }); });
       });
       cols.forEach(function (c) {
         var th = el("th", c.task.id === "puffer" ? "puffer-col" : null, c.kid.name + " " + c.task.icon);
@@ -1172,8 +1262,9 @@
     for (var ti = 0; ti < tiles.length; ti++) {
       (function (b) { b.onclick = function () { showView(b.getAttribute("data-go")); }; })(tiles[ti]);
     }
-    $("bed-history-btn").onclick = function () { showView("history"); };
-    $("history-back").onclick = function () { showView("bedtime"); };
+    $("bed-history-btn").onclick = function () { historyRoutine = "bedtime"; showView("history"); };
+    $("morning-history-btn").onclick = function () { historyRoutine = "morning"; showView("history"); };
+    $("history-back").onclick = function () { showView(historyRoutine); };
     $("cal-prev").onclick = function () { calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() - 1, 1); loadMonth(); };
     $("cal-next").onclick = function () { calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 1); loadMonth(); };
     $("cal-today").onclick = function () { calMonth = now(); calMonth.setDate(1); selectedDay = ymd(now()); loadMonth(); };

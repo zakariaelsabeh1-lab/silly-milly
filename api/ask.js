@@ -90,11 +90,14 @@ const tools = [
   {
     name: "get_bedtime_history",
     description:
-      "The kids' bedtime checklist for recent days: which tasks (toilet, puffer, vitamins, teeth, jammies, ready for tomorrow) were ticked and at what time. Puffer is Noah's only.",
+      "The kids' checklist history for recent days: which tasks were ticked and at what time. Bedtime tasks: toilet, puffer, vitamins, teeth, jammies, ready (for tomorrow). Morning tasks: toilet, puffer, vitamins, teeth, dressed, breakfast, ready (for school or daycare). Puffer is Noah's only. Times are 24-hour local time.",
     input_schema: {
       type: "object",
-      properties: { days: { type: "integer", description: "How many recent days, 1-60" } },
-      required: ["days"],
+      properties: {
+        days: { type: "integer", description: "How many recent days, 1-60" },
+        routine: { type: "string", enum: ["bedtime", "morning"], description: "Which routine; bedtime if unsure" },
+      },
+      required: ["days", "routine"],
       additionalProperties: false,
     },
   },
@@ -193,7 +196,7 @@ async function runTool(name, input, state) {
     case "get_weather":
       return await fetchWeather();
     case "get_bedtime_history":
-      return await recentDays(Math.min(Math.max(Number(input.days) || 7, 1), 60));
+      return await recentDays(Math.min(Math.max(Number(input.days) || 7, 1), 60), input.routine === "morning" ? "morning" : "bedtime");
     default:
       return { error: "Unknown tool" };
   }
