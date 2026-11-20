@@ -758,7 +758,8 @@
     resumeWake();
   }
   var closeTimer = null;
-  function listen() {
+  // followUp = listening for the next thing in a conversation: if nobody speaks, just close quietly.
+  function listen(followUp) {
     clearTimeout(closeTimer);
     if (!SR) {
       setOrb("", "Type your question");
@@ -784,8 +785,12 @@
     };
     r.onend = function () {
       recognizer = null;
+      if ($("milly-panel").classList.contains("hidden")) return;
       if (gotResult && finalText.trim()) ask(finalText.trim());
-      else if ($("milly-panel").classList.contains("hidden") === false && !$("milly-reply").textContent) {
+      else if (followUp) {
+        setOrb("", "Say “Hey Silly Milly” any time");
+        closeTimer = setTimeout(closeMilly, 1500);
+      } else if (!$("milly-reply").textContent) {
         setOrb("", "I didn't hear anything");
         closeTimer = setTimeout(closeMilly, 6000);
       } else {
@@ -793,16 +798,28 @@
         closeTimer = setTimeout(closeMilly, 8000);
       }
     };
-    setOrb("listening", "Listening…");
+    setOrb("listening", followUp ? "Anything else?" : "Listening…");
     try { r.start(); } catch (e) { setOrb("", "Microphone busy, try again"); }
   }
+  var lastAskAt = 0;
+  var WAKE_PREFIX = /^\s*(?:(?:hey|hi|okay|ok)\s+)?(?:silly|silli|sili)\s*(?:milly|millie|milli|mili)[\s,.!?]*/i;
+  var DONE_RE = /^(?:(?:ok(?:ay)?|no|nope)[\s,]+)?(?:thanks?(?: you)?(?: milly)?|thank you(?: milly)?|that'?s (?:all|it)|no thanks?|nope|nothing|bye|goodbye|bye bye|see you|stop|never ?mind|cancel|go away|i'?m good|all done)[\s.!]*$/i;
   function ask(text) {
+    text = text.replace(WAKE_PREFIX, "").trim();
+    if (!text) { listen(true); return; } // just "Hey Silly Milly" again: keep listening
+    // A new conversation after a long gap starts fresh.
+    if (Date.now() - lastAskAt > 10 * 60000) history = [];
+    lastAskAt = Date.now();
     $("milly-heard").textContent = "“" + text + "”";
     setOrb("thinking", "Thinking…");
     $("milly-reply").textContent = "";
     var lower = text.toLowerCase();
     // A couple of instant answers that don't need the internet
-    if (/^(stop|never ?mind|cancel|go away|bye|goodbye)\b/.test(lower)) { say("Okay!"); closeMilly(); return; }
+    if (DONE_RE.test(lower)) {
+      var bye = /thank/.test(lower) ? "You're welcome!" : /bye|see you/.test(lower) ? "Bye bye!" : "Okay!";
+      $("milly-reply").textContent = bye; setOrb("speaking", "Silly Milly");
+      say(bye, closeMilly); return;
+    }
     api("/api/ask", { method: "POST", body: { text: text, history: history.slice(-8), tz: activeTz() || deviceTz() } }).then(function (r) {
       history.push({ role: "user", text: text });
       history.push({ role: "assistant", text: r.reply });
@@ -812,7 +829,8 @@
       setOrb("speaking", "Silly Milly");
       say(r.reply, function () {
         if ($("milly-panel").classList.contains("hidden")) return;
-        if (/\?\s*$/.test(r.reply) && SR) { listen(); return; } // she asked something: listen for the answer
+        // Keep the conversation going: listen for a follow-up. Silence closes it.
+        if (SR) { listen(true); return; }
         setOrb("", "Tap to ask again");
         closeTimer = setTimeout(closeMilly, 9000);
       });
