@@ -5,6 +5,10 @@
 import { send, readBody, query, checkAuth } from "../lib/http.js";
 import { getKey, setKey } from "../lib/store.js";
 
+function validZone(z) {
+  try { new Intl.DateTimeFormat("en-US", { timeZone: z }); return true; } catch { return false; }
+}
+
 export default async function handler(req, res) {
   if (!checkAuth(req, res)) return;
   try {
@@ -15,6 +19,7 @@ export default async function handler(req, res) {
         hasWakeWord: Boolean(s.wakeWordBase64),
         sensitivity: s.sensitivity ?? 0.6,
         voiceName: s.voiceName || "",
+        timeZone: s.timeZone || "",
         assistantReady: Boolean(process.env.ANTHROPIC_API_KEY),
       };
       if (query(req).wake) out.wakeWordBase64 = s.wakeWordBase64 || "";
@@ -29,6 +34,11 @@ export default async function handler(req, res) {
       }
       if (typeof b.sensitivity === "number") s.sensitivity = Math.min(Math.max(b.sensitivity, 0.1), 0.95);
       if (typeof b.voiceName === "string") s.voiceName = b.voiceName.slice(0, 120);
+      if (typeof b.timeZone === "string") {
+        const z = b.timeZone.trim();
+        if (z === "" || z === "auto" || validZone(z)) s.timeZone = z;
+        else return send(res, 400, { error: "Unknown time zone" });
+      }
       await setKey("settings", s);
       return send(res, 200, { ok: true });
     }

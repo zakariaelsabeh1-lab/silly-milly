@@ -106,11 +106,17 @@ const tools = [
   },
 ];
 
-function systemPrompt() {
-  const now = nowLocal();
+function validZone(z) {
+  if (!z || typeof z !== "string" || z.length > 64) return false;
+  try { new Intl.DateTimeFormat("en-US", { timeZone: z }); return true; } catch { return false; }
+}
+
+// tz is the family's time zone sent by the tablet, so Milly's "today" and "now" match its clock.
+function systemPrompt(tz) {
+  const now = nowLocal(tz);
   return `You are Silly Milly, the friendly voice assistant on a family's kitchen wall tablet in ${CITY}, Canada. The family's kids are ${KIDS}; kids and grown-ups both talk to you.
 
-Right now it is ${now.weekday}, ${now.date}, ${now.time} (${TZ}).
+Right now it is ${now.weekday}, ${now.date}, ${now.time} (${tz}). Use this time zone for all dates and times.
 
 How to answer:
 - Your words are read aloud by a text-to-speech voice. Reply in plain spoken sentences: no markdown, lists, emoji, URLs or symbols. Usually one to three short sentences. Longer only when asked for a story, a joke or an explanation.
@@ -190,11 +196,11 @@ async function runTool(name, input, state) {
   }
 }
 
-async function callClaude(messages, useFallbacks) {
+async function callClaude(messages, useFallbacks, tz) {
   const params = {
     model: MODEL,
     max_tokens: 4000,
-    system: systemPrompt(),
+    system: systemPrompt(tz),
     output_config: { effort: process.env.MILLY_EFFORT || "low" },
     tools,
     messages,
@@ -229,17 +235,18 @@ export default async function handler(req, res) {
   if (messages.length && messages[messages.length - 1].role === "user") messages.pop();
   messages.push({ role: "user", content: text });
 
+  const tz = validZone(body.tz) ? body.tz : TZ;
   const state = { changed: false };
   let useFallbacks = BIG_MODEL;
   try {
     for (let step = 0; step < 8; step++) {
       let response;
       try {
-        response = await callClaude(messages, useFallbacks);
+        response = await callClaude(messages, useFallbacks, tz);
       } catch (e) {
         if (useFallbacks && e instanceof Anthropic.BadRequestError) {
           useFallbacks = false; // fallback feature not available on this account; try plainly
-          response = await callClaude(messages, false);
+          response = await callClaude(messages, false, tz);
         } else {
           throw e;
         }

@@ -10,7 +10,11 @@
     place: "Prince George",
     lat: 53.9171,
     lon: -122.7497,
-    tz: "America/Vancouver",
+    // B.C. stopped changing its clocks in November 2026 and now stays on UTC-7 all year.
+    // Older browsers still think B.C. "fell back" to UTC-8, so the clock was an hour behind.
+    // "America/Dawson_Creek" has always been UTC-7 all year, so every browser gets it right.
+    tz: "America/Dawson_Creek",       // time zone for the weather forecast's days
+    clockTz: "America/Dawson_Creek",  // clock, bedtime schedule and Milly ("auto" = tablet's setting; also in ⚙️ Settings)
     kids: [
       { id: "noah", name: "Noah", color: "#5aa9ff" },
       { id: "didi", name: "Didi", color: "#ff7ab6" }
@@ -60,6 +64,32 @@
   var MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
   function storeDel(k) { try { localStorage.removeItem(k); } catch (e) {} }
+
+  // ---------- family time zone ----------
+  // The clock follows a fixed time zone instead of the browser's own, because browsers with
+  // out-of-date time zone rules show B.C. time an hour behind (see CONFIG.clockTz).
+  var tzFormatter = null, tzFormatterZone = null;
+  function activeTz() {
+    var z = (typeof settings !== "undefined" && settings && settings.timeZone) || CONFIG.clockTz;
+    return z && z !== "auto" ? z : null;
+  }
+  function deviceTz() {
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) { return ""; }
+  }
+  // Returns a Date whose local fields (getHours, getDate...) show the wall-clock time in the family's zone.
+  function now() {
+    var real = new Date(), tz = activeTz();
+    if (!tz) return real;
+    try {
+      if (tzFormatterZone !== tz) {
+        tzFormatter = new Intl.DateTimeFormat("en-US", { timeZone: tz, year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric", second: "numeric", hour12: false });
+        tzFormatterZone = tz;
+      }
+      var p = {};
+      tzFormatter.formatToParts(real).forEach(function (x) { p[x.type] = x.value; });
+      return new Date(+p.year, +p.month - 1, +p.day, (+p.hour) % 24, +p.minute, +p.second);
+    } catch (e) { return real; }
+  }
 
   // ---------- API with family PIN ----------
   var pin = store("familyPin") || "";
@@ -126,14 +156,14 @@
     if (name === "settings") renderSettings();
   }
   function defaultView() {
-    var t = hm(new Date());
+    var t = hm(now());
     return between(t, CONFIG.bedtime.start, CONFIG.bedtime.showUntil) ? "bedtime" : "home";
   }
 
   // ---------- clock ----------
   var lastMinute = "";
   function tick() {
-    var d = new Date();
+    var d = now();
     var h = d.getHours() % 12 || 12;
     $("clock").innerHTML = h + ":" + pad(d.getMinutes()) + "<small>" + (d.getHours() >= 12 ? "PM" : "AM") + "</small>";
     $("date").textContent = DAYS_LONG[d.getDay()] + ", " + MONTHS[d.getMonth()] + " " + d.getDate();
@@ -335,7 +365,7 @@
     return who === "Parents" ? "#b18cff" : "#ffd166";
   }
   function whenText(e) {
-    var todayD = parseYmd(ymd(new Date()));
+    var todayD = parseYmd(ymd(now()));
     var day = parseYmd(e.occurrence);
     var diff = Math.round((day - todayD) / 86400000);
     var label = diff === 0 ? "Today" : diff === 1 ? "Tomorrow" : DAYS_LONG[day.getDay()] + ", " + MONTHS[day.getMonth()].slice(0, 3) + " " + day.getDate();
@@ -354,9 +384,9 @@
     return it;
   }
   function loadUpcoming() {
-    var s = new Date();
+    var s = now();
     api("/api/events?start=" + ymd(s) + "&end=" + ymd(addDays(s, 60))).then(function (r) {
-      var todayS = ymd(new Date()), nowT = hm(new Date());
+      var todayS = ymd(now()), nowT = hm(now());
       var tList = $("today-list"), uList = $("upcoming-list");
       tList.innerHTML = ""; uList.innerHTML = "";
       var todays = r.events.filter(function (e) { return e.occurrence === todayS; });
@@ -385,7 +415,7 @@
   function renderHomeBed() {
     var box = $("home-bed"); if (!box) return;
     box.innerHTML = "";
-    var t = hm(new Date()), bt = CONFIG.bedtime;
+    var t = hm(now()), bt = CONFIG.bedtime;
     var when;
     if (t >= "05:00" && t < bt.start) {
       var m = minutesUntil(bt.start), hh = Math.floor(m / 60), mm = m % 60;
@@ -436,7 +466,7 @@
     return parts.join(" ");
   }
   function loadToday() {
-    var key = ymd(new Date());
+    var key = ymd(now());
     return api("/api/bedtime?days=1").then(function (r) {
       today = (r.days && r.days[key]) || {};
       CONFIG.kids.forEach(function (k) { if (!leftFor(k).length) celebrated[key + k.id] = true; });
@@ -469,7 +499,7 @@
     renderHomeBed();
   }
   function updateBedStatus() {
-    var t = hm(new Date()), bt = CONFIG.bedtime, s;
+    var t = hm(now()), bt = CONFIG.bedtime, s;
     if (t < bt.start && t >= "12:00") s = "Bedtime routine starts at " + to12(bt.start);
     else if (t >= bt.start && t < bt.remind) s = "Getting ready for bed";
     else if (t >= bt.remind && t < bt.bed) s = "Almost bedtime! " + (Math.max(0, minutesUntil(bt.bed))) + " minutes left";
@@ -481,17 +511,17 @@
     for (var i = 0; i < pills.length; i++) pills[i].classList.toggle("now", i === idx);
   }
   function minutesUntil(t) {
-    var n = new Date(), p = t.split(":");
+    var n = now(), p = t.split(":");
     return (+p[0] * 60 + +p[1]) - (n.getHours() * 60 + n.getMinutes());
   }
   function toggleTask(kid, t) {
-    var key = ymd(new Date());
+    var key = ymd(now());
     var done = today[kid.id] = today[kid.id] || {};
     var on = !done[t.id];
-    if (on) done[t.id] = hm(new Date()); else delete done[t.id];
+    if (on) done[t.id] = hm(now()); else delete done[t.id];
     renderBedtime();
     if (on) blip();
-    api("/api/bedtime", { method: "POST", body: { date: key, kid: kid.id, task: t.id, done: on, time: hm(new Date()) } })
+    api("/api/bedtime", { method: "POST", body: { date: key, kid: kid.id, task: t.id, done: on, time: hm(now()) } })
       .catch(function () { /* will resync on next load */ });
     if (on && !leftFor(kid).length && !celebrated[key + kid.id]) {
       celebrated[key + kid.id] = true;
@@ -514,7 +544,7 @@
       });
       table.appendChild(thead);
       for (var i = 0; i < 14; i++) {
-        var d = addDays(new Date(), -i), key = ymd(d), day = (r.days && r.days[key]) || {};
+        var d = addDays(now(), -i), key = ymd(d), day = (r.days && r.days[key]) || {};
         var tr = el("tr");
         tr.appendChild(el("td", null, (i === 0 ? "Today" : i === 1 ? "Yesterday" : DAYS[d.getDay()] + " " + MONTHS[d.getMonth()].slice(0, 3) + " " + d.getDate())));
         cols.forEach(function (c) {
@@ -566,8 +596,8 @@
   }
 
   // ---------- calendar ----------
-  var calMonth = new Date(); calMonth.setDate(1);
-  var selectedDay = ymd(new Date());
+  var calMonth = now(); calMonth.setDate(1);
+  var selectedDay = ymd(now());
   var monthEvents = [];
   function loadMonth() {
     var first = new Date(calMonth.getFullYear(), calMonth.getMonth(), 1);
@@ -581,7 +611,7 @@
   }
   function renderMonth(start) {
     var grid = $("cal-grid"); grid.innerHTML = "";
-    var todayS = ymd(new Date());
+    var todayS = ymd(now());
     for (var i = 0; i < 42; i++) {
       var d = addDays(start, i), key = ymd(d);
       var cell = el("button", "cal-cell" + (d.getMonth() !== calMonth.getMonth() ? " other" : "") + (key === todayS ? " today" : "") + (key === selectedDay ? " selected" : ""));
@@ -772,7 +802,7 @@
     var lower = text.toLowerCase();
     // A couple of instant answers that don't need the internet
     if (/^(stop|never ?mind|cancel|go away|bye|goodbye)\b/.test(lower)) { say("Okay!"); closeMilly(); return; }
-    api("/api/ask", { method: "POST", body: { text: text, history: history.slice(-8) } }).then(function (r) {
+    api("/api/ask", { method: "POST", body: { text: text, history: history.slice(-8), tz: activeTz() || deviceTz() } }).then(function (r) {
       history.push({ role: "user", text: text });
       history.push({ role: "assistant", text: r.reply });
       if (history.length > 12) history = history.slice(-12);
@@ -854,6 +884,8 @@
     voices.filter(function (v) { return /^en/i.test(v.lang); }).forEach(function (v) {
       var o = el("option", null, v.name + " (" + v.lang + ")"); o.value = v.name; if (v.name === settings.voiceName) o.selected = true; sel.appendChild(o);
     });
+    $("set-tz").value = settings.timeZone || "";
+    $("set-tz-now").textContent = "The app's clock says " + to12(hm(now())) + ". The tablet's own time zone is " + (deviceTz() || "unknown") + ".";
     $("set-status").innerHTML = "";
     [
       ["Speech-to-text in this browser", SR ? "✅ yes" : "❌ no (use Chrome)"],
@@ -867,7 +899,8 @@
     var body = {
       picovoiceKey: $("set-pv-key").value.trim(),
       sensitivity: parseFloat($("set-sens").value),
-      voiceName: $("set-voice").value
+      voiceName: $("set-voice").value,
+      timeZone: $("set-tz").value
     };
     if (pendingPpn) body.wakeWordBase64 = pendingPpn;
     api("/api/settings", { method: "POST", body: body }).then(function () {
@@ -875,6 +908,7 @@
       return loadSettings();
     }).then(function () {
       renderSettings();
+      lastMinute = ""; tick(); loadUpcoming(); renderBedtime();
       $("set-status").appendChild(el("div", null, "Saved. Starting the wake word…"));
       if (porcupine) { try { WebVoiceProcessor.WebVoiceProcessor.unsubscribe(porcupine); porcupine.terminate(); } catch (e) {} porcupine = null; wakeActive = false; }
       startWake();
@@ -907,7 +941,7 @@
     $("history-back").onclick = function () { showView("bedtime"); };
     $("cal-prev").onclick = function () { calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() - 1, 1); loadMonth(); };
     $("cal-next").onclick = function () { calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 1); loadMonth(); };
-    $("cal-today").onclick = function () { calMonth = new Date(); calMonth.setDate(1); selectedDay = ymd(new Date()); loadMonth(); };
+    $("cal-today").onclick = function () { calMonth = now(); calMonth.setDate(1); selectedDay = ymd(now()); loadMonth(); };
     $("add-event-btn").onclick = function () { eventForm(null); };
     $("modal").onclick = function (e) { if (e.target === $("modal") && !pinWaiters) closeModal(); };
     $("milly-btn").onclick = function () { openMilly(false); };

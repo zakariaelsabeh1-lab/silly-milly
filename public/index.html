@@ -138,6 +138,15 @@
           <div id="wake-status" class="muted"></div>
         </div>
         <div class="set-card">
+          <h3>Time zone</h3>
+          <label>Clock, bedtime and Milly use<select id="set-tz">
+            <option value="">B.C. time, UTC−7 all year (recommended)</option>
+            <option value="America/Edmonton">Alberta time (changes clocks in spring and fall)</option>
+            <option value="auto">Same as the tablet's setting</option>
+          </select></label>
+          <div id="set-tz-now" class="muted"></div>
+        </div>
+        <div class="set-card">
           <h3>Voice</h3>
           <label>Milly's voice<select id="set-voice"></select></label>
           <button id="set-test-voice" class="ghost-btn">Test voice</button>
