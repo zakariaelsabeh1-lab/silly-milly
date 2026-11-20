@@ -41,21 +41,22 @@ Test it: open your `vercel.app` address on your computer. Tap the screen, type y
 
 ## Part 3. The "Hey Silly Milly" wake word
 
-**By default you tap the yellow Milly button to talk.** That's quiet and always works.
+Milly listens for "Hey Silly Milly" **on the tablet itself**. There's no account, no key, and no beeping. The first time takes about a minute per person:
 
-Hands-free "Hey Silly Milly" has two options, both in **⚙️ Settings → How to listen**:
+1. Open the app, tap the screen, tap **Allow** when Chrome asks for the microphone.
+2. Go to **⚙️ Settings**. Under *Teach Milly your voices*, type who's recording (Dad, Mom, Noah, Didi) and tap **🎙️ Record 3 times**.
+3. When it shows **🔴 Say "Hey Silly Milly" now**, say it at a normal voice, from where you'd usually stand. It does this 3 times.
+4. Repeat for each person. Kids should record their own voice; it makes a big difference.
+5. Try it: say "Hey Silly Milly", wait for the chime, then ask your question. The Milly button shows a **green dot** while she's listening.
 
-**Always listen with Chrome** (no account needed). Works, but with real downsides on Android:
-- Android beeps every time Chrome restarts listening, which can be every few seconds in a noisy room. A web page has no way to turn that beep off.
-- The phone's own green mic light flickers each time it restarts.
-- Chrome sends what the mic hears to Google while it listens, and it uses more battery.
-- The app only wakes on "Silly Milly" / "Hey Silly Milly" exactly, and sleeps from 9:30 PM to 6 AM.
-If the beeping is too much, switch back to **Tap Milly to talk**.
+**Sensitivity**: the bar in Settings shows how close each phrase gets (100% wakes her). If she misses you, move the slider up. If she wakes by mistake, move it down, or record a few more samples.
 
-**Picovoice** (the quiet option) listens on the tablet itself: no beeps, nothing sent while waiting, and it only reacts to the trained phrase. Their free signup can sit "in review" for a while; once approved:
-1. At https://console.picovoice.ai, your **AccessKey** is on the **Home** page (also under **Account**) with a copy button. If you see "request in review" instead, Picovoice hasn't approved the account yet and there's no key to copy; tap Milly meanwhile.
-2. Go to **Porcupine**, type `Hey Silly Milly`, language **English**, **Train**, choose **Web (WASM)**, download and unzip to get the `.ppn` file. Get it onto the tablet.
-3. In the app's **⚙️ Settings**, paste the AccessKey, choose the `.ppn` file, tap **Save**. With "How to listen" on Tap Milly to talk, it switches to Picovoice by itself. If she wakes by accident, lower the sensitivity.
+Good to know:
+- It's experimental. It runs small speech models in Chrome. On an older tablet it uses part of one processor core while there's sound in the room (much less when it's quiet). The tablet may run a bit warm. Keep it plugged in.
+- The audio never leaves the tablet while it waits. After the chime, your question goes to Chrome's speech-to-text as before (that part may make one beep).
+- Android shows its microphone indicator the whole time it's listening.
+- It sleeps from 9:30 PM to 6 AM and whenever the app isn't on screen. Tap Milly any time.
+- Settings → **Always listen** can switch it **Off**, or to Chrome speech (that one beeps on Android).
 
 ## Part 4. Set up the tablet
 

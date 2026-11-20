@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const root = path.resolve("public");
-const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png", ".pv": "application/octet-stream", ".webmanifest": "application/manifest+json" };
+const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png", ".pv": "application/octet-stream", ".mjs": "text/javascript", ".wasm": "application/wasm", ".onnx": "application/octet-stream", ".webmanifest": "application/manifest+json" };
 
 http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");

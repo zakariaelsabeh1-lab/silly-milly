@@ -129,19 +129,26 @@
       <div class="settings">
         <div class="bed-title">Settings</div>
         <div class="set-card">
-          <h3>"Hey Silly Milly" wake word</h3>
-          <label>How to listen<select id="set-wake-mode">
-            <option value="">Tap Milly to talk (uses Picovoice once it is added)</option>
-            <option value="chrome">Always listen with Chrome (beeps on Android)</option>
-            <option value="picovoice">Picovoice (needs AccessKey and .ppn file)</option>
+          <h3>"Hey Silly Milly" hands-free</h3>
+          <label>Always listen<select id="set-wake-mode">
+            <option value="">On, listening on the tablet (quiet, recommended)</option>
+            <option value="chrome">On, using Chrome speech (beeps on Android)</option>
             <option value="off">Off (tap the Milly button to talk)</option>
           </select></label>
-          <div id="wake-status" class="muted"></div>
-          <p class="muted">Chrome listening needs no account, but Android beeps every time it restarts listening and a web page can't turn that beep off. Picovoice is quiet and only listens for the exact phrase, but needs an approved account. See SETUP.md.</p>
-          <label>Picovoice AccessKey<input id="set-pv-key" type="password" autocomplete="off" placeholder="Paste AccessKey"></label>
-          <label>Wake word file (.ppn for Web)<input id="set-ppn" type="file" accept=".ppn"></label>
-          <div id="set-ppn-status" class="muted"></div>
-          <label>Picovoice sensitivity <span id="set-sens-val"></span><input id="set-sens" type="range" min="0.3" max="0.9" step="0.05"></label>
+          <div id="wake-status" class="wake-status"></div>
+          <h4>Teach Milly your voices</h4>
+          <p class="muted">Each person says “Hey Silly Milly” 3 times, standing where you'd normally talk to the tablet, at a normal voice. Kids should record their own. Recordings stay on your app; nothing goes to Google.</p>
+          <div class="wake-rec-row">
+            <input id="wake-who" type="text" list="wake-who-list" maxlength="30" placeholder="Who's recording? (e.g. Dad, Noah)">
+            <datalist id="wake-who-list"><option value="Mom"><option value="Dad"><option value="Noah"><option value="Didi"></datalist>
+            <button id="wake-record" class="big-btn">🎙️ Record 3 times</button>
+          </div>
+          <div id="wake-rec-status" class="wake-rec-status"></div>
+          <div id="wake-voices" class="wake-voices"></div>
+          <label>Sensitivity <span id="set-sens-val"></span><input id="set-sens" type="range" min="1" max="10" step="1"></label>
+          <p class="muted">Higher wakes more easily, but also by mistake. Lower means fewer false wakes. Watch the bar below while you say it.</p>
+          <div class="wake-meter"><div id="wake-meter-bar"></div></div>
+          <div id="wake-meter-text" class="muted"></div>
         </div>
         <div class="set-card">
           <h3>Time zone</h3>
@@ -202,6 +209,7 @@
   <!-- Night dimmer -->
   <div id="dimmer" class="dimmer hidden"><div id="dim-clock" class="dim-clock"></div></div>
 
+  <script src="/wake/milly-wake.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

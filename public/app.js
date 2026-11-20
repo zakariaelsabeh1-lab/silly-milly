@@ -704,7 +704,7 @@
 
   // ---------- speech out ----------
   var voices = [];
-  var settings = { voiceName: "", picovoiceKey: "", hasWakeWord: false, sensitivity: 0.6, wakeMode: "" };
+  var settings = { voiceName: "", wakeSens: 5, wakeMode: "" };
   function loadVoices() { try { voices = window.speechSynthesis ? speechSynthesis.getVoices() : []; } catch (e) { voices = []; } }
   function pickVoice() {
     if (!voices.length) loadVoices();
@@ -826,65 +826,79 @@
 
   // ---------- "Hey Silly Milly" wake word ----------
   // Two engines:
-  //  "chrome":    Chrome's own speech-to-text listens all the time and we look for the phrase in
-  //               what it hears. No key or account needed. This is the default.
-  //  "picovoice": Picovoice Porcupine, on-device. Needs an AccessKey and a .ppn file.
+  //  "local":  (default) listens on the tablet itself with small open speech models, matching the
+  //            family's own recorded "Hey Silly Milly" samples. One continuous mic stream, so no
+  //            Android beeps, and nothing is sent anywhere while waiting. See public/wake/.
+  //  "chrome": Chrome's speech-to-text listening all the time. Opt-in; Android beeps on each restart.
   // Only one thing can use the microphone at a time, so the wake word pauses while Milly listens.
   var wakeEngine = null, wakeActive = false, wakeError = "";
+  var wakeTemplates = [];
   function wantedEngine() {
     var m = settings.wakeMode || "";
-    var pvReady = settings.picovoiceKey && settings.hasWakeWord;
     if (m === "off") return null;
-    if (m === "picovoice") return pvReady ? "picovoice" : null;
     if (m === "chrome") return SR ? "chrome" : null;
-    return pvReady ? "picovoice" : null; // built-in Chrome listening is opt-in (it beeps on Android)
+    return window.MillyWake && MillyWake.supported ? "local" : null;
   }
+  function wakeThreshold() { var s = settings.wakeSens || 5; return 0.05 + 0.007 * s; }
   function startWake() {
     stopWake();
     var eng = wantedEngine();
     if (!eng) {
       var m = settings.wakeMode || "";
-      wakeError = m === "off" ? "turned off in Settings." : m === "picovoice" ? "Picovoice isn't set up yet (needs the AccessKey and .ppn file)." : m === "chrome" ? "this browser can't listen. Use Chrome." : "";
+      wakeError = m === "off" ? "" : m === "chrome" ? "this browser can't listen. Use Chrome." : "this browser can't run the on-tablet listener. Update Chrome.";
       updateWakeBadge(); return Promise.resolve();
     }
     wakeEngine = eng; wakeError = "";
-    return eng === "picovoice" ? startPicovoice() : resumeWake();
+    if (eng === "chrome") return resumeWake();
+    return api("/api/settings?templates=1").then(function (r) {
+      wakeTemplates = r.wakeTemplates || [];
+      MillyWake.on("wake", function () { if (!millyBusy && wakeEngine === "local") openMilly(true); });
+      MillyWake.on("level", onWakeLevel);
+      MillyWake.on("error", function (m) { wakeError = m; updateWakeBadge(); });
+      return MillyWake.setTemplates(wakeTemplates).then(function () { return MillyWake.setThreshold(wakeThreshold()); });
+    }).then(function () { return resumeWake(); })
+      .catch(function (err) { wakeError = String(err && err.message || err); updateWakeBadge(); });
   }
   function stopWake() {
-    if (wakeEngine === "picovoice" && porcupine) {
-      try { WebVoiceProcessor.WebVoiceProcessor.unsubscribe(porcupine); porcupine.terminate(); } catch (e) {}
-      porcupine = null;
-    }
     if (wakeEngine === "chrome") chromeWakeStop();
+    if (wakeEngine === "local") MillyWake.stop();
     wakeEngine = null; wakeActive = false; updateWakeBadge();
   }
   function pauseWake() {
     if (wakeEngine === "chrome") return chromeWakeStop();
-    if (!porcupine || !wakeActive) return Promise.resolve();
-    wakeActive = false; updateWakeBadge();
-    // Release the microphone so speech recognition can use it.
-    return WebVoiceProcessor.WebVoiceProcessor.unsubscribe(porcupine).catch(function () {});
+    if (wakeEngine === "local") { wakeActive = false; updateWakeBadge(); return MillyWake.stop(); }
+    return Promise.resolve();
+  }
+  function localCanListen() {
+    return wakeEngine === "local" && !millyBusy && !enrollingNow && wakeTemplates.length && document.visibilityState === "visible" && !wakeQuietTime();
   }
   function resumeWake() {
     if (wakeEngine === "chrome") { chromeWakeStart(0); return Promise.resolve(); }
-    if (!porcupine || wakeActive) return Promise.resolve();
-    return WebVoiceProcessor.WebVoiceProcessor.subscribe(porcupine).then(function () {
+    if (wakeEngine !== "local") return Promise.resolve();
+    if (!localCanListen()) { wakeActive = false; updateWakeBadge(); return Promise.resolve(); }
+    return MillyWake.start().then(function () {
+      if (!localCanListen()) return MillyWake.stop(); // something changed while the mic was opening
       wakeActive = true; wakeError = ""; updateWakeBadge();
-    }).catch(function (err) { wakeError = String(err && err.message || err); updateWakeBadge(); });
+    }).catch(function (err) {
+      var m = String(err && (err.name || err.message) || err);
+      wakeError = /NotAllowed|Permission/i.test(m) ? "the microphone is blocked. In Chrome, open Site settings and set Microphone to Allow, then reload." : /NotFound/i.test(m) ? "no microphone found." : /NotReadable/i.test(m) ? "the microphone is busy in another app." : m;
+      wakeActive = false; updateWakeBadge();
+    });
   }
   function wakeQuietTime() {
     return between(hm(now()), CONFIG.nightDim.from, CONFIG.nightDim.to);
   }
   function updateWakeBadge() {
-    // The green dot is for Picovoice only. With Chrome listening, Android already shows its own mic light.
-    $("milly-btn").classList.toggle("wake-on", wakeActive && wakeEngine === "picovoice");
+    // Green dot = the quiet on-tablet listener is on. (With Chrome listening, Android shows its own mic light.)
+    $("milly-btn").classList.toggle("wake-on", wakeActive && wakeEngine === "local");
     var s = $("wake-status");
     if (!s) return;
-    var how = wakeEngine === "picovoice" ? " (Picovoice)" : " (built-in Chrome listening)";
+    var how = wakeEngine === "local" ? " (on the tablet, quiet)" : " (Chrome speech)";
     if (wakeActive) s.textContent = "✅ Listening for \"Hey Silly Milly\"" + how + ".";
-    else if (wakeEngine === "chrome" && wakeQuietTime()) s.textContent = "😴 Sleeping for the night (" + to12(CONFIG.nightDim.from) + " to " + to12(CONFIG.nightDim.to) + "). Tap Milly to talk.";
+    else if (wakeEngine === "local" && !wakeTemplates.length && !wakeError) s.textContent = "👉 Almost ready: record your voices below so Milly knows what \"Hey Silly Milly\" sounds like.";
+    else if (wakeEngine && wakeQuietTime() && !wakeError) s.textContent = "😴 Sleeping for the night (" + to12(CONFIG.nightDim.from) + " to " + to12(CONFIG.nightDim.to) + "). Tap Milly to talk.";
     else if (wakeEngine && !wakeError) s.textContent = "Paused while Milly is talking.";
-    else if (!wakeEngine && !settings.wakeMode && !wakeError) s.textContent = "Hands-free is off. Tap the Milly button to talk.";
+    else if (!wakeEngine && settings.wakeMode === "off") s.textContent = "Hands-free is off. Tap the Milly button to talk.";
     else s.textContent = "Wake word off: " + (wakeError || "not set up.");
   }
 
@@ -968,9 +982,14 @@
   }
   // Sleep the built-in listening overnight (fewer beeps, less battery), wake it in the morning.
   function wakeMinute() {
-    if (wakeEngine !== "chrome" || millyBusy) return;
-    if (wakeQuietTime()) { if (cw.rec) chromeWakeStop(); updateWakeBadge(); }
-    else if (!cw.rec && document.visibilityState === "visible") chromeWakeStart(0);
+    if (millyBusy || enrollingNow) return;
+    if (wakeEngine === "chrome") {
+      if (wakeQuietTime()) { if (cw.rec) chromeWakeStop(); updateWakeBadge(); }
+      else if (!cw.rec && document.visibilityState === "visible") chromeWakeStart(0);
+    } else if (wakeEngine === "local") {
+      if (wakeQuietTime()) { if (MillyWake.running()) pauseWake(); else updateWakeBadge(); }
+      else if (!MillyWake.running()) resumeWake();
+    }
   }
   // "Hey Silly Milly, what's the weather tomorrow?" in one breath: answer straight away.
   function openMillyWith(text) {
@@ -982,49 +1001,103 @@
     pauseWake().then(function () { wakeSound(); ask(text); });
   }
   document.addEventListener("visibilitychange", function () {
-    if (wakeEngine !== "chrome") return;
-    if (document.visibilityState === "visible") { if (!millyBusy) chromeWakeStart(500); }
-    else chromeWakeStop();
+    if (wakeEngine === "chrome") {
+      if (document.visibilityState === "visible") { if (!millyBusy) chromeWakeStart(500); }
+      else chromeWakeStop();
+    } else if (wakeEngine === "local") {
+      if (document.visibilityState === "visible") { if (!millyBusy) resumeWake(); }
+      else pauseWake();
+    }
   });
 
-  // --- Picovoice Porcupine ---
-  var porcupine = null;
-  function loadScript(src) {
-    return new Promise(function (res, rej) {
-      var s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = function () { rej(new Error("Couldn't load " + src)); };
-      document.head.appendChild(s);
+  // --- Teaching Milly the family's voices (Settings) ---
+  var enrollingNow = false;
+  function onWakeLevel(d) {
+    if (currentView !== "settings") return;
+    var bar = $("wake-meter-bar"), txt = $("wake-meter-text");
+    if (!bar) return;
+    var thr = wakeThreshold(), sc = d.score;
+    var pct = sc == null ? 0 : Math.max(0, Math.min(1, (0.25 - sc) / (0.25 - thr)));
+    bar.style.width = Math.round(pct * 100) + "%";
+    bar.className = pct >= 1 ? "hit" : pct > 0.7 ? "near" : "";
+    txt.textContent = (d.listening ? "Hearing sound. " : "Quiet room. ") + "Match: " + Math.round(pct * 100) + "% (100% wakes Milly). Uses about " + Math.round(d.ms) + " ms of every 80 ms of audio.";
+  }
+  function renderWakeVoices() {
+    var box = $("wake-voices"); box.innerHTML = "";
+    var by = {};
+    wakeTemplates.forEach(function (t) { by[t.who] = (by[t.who] || 0) + 1; });
+    var names = Object.keys(by);
+    if (!names.length) { box.appendChild(el("div", "muted", "No voices recorded yet.")); return; }
+    names.forEach(function (n) {
+      var row = el("div", "wake-voice");
+      row.appendChild(el("span", null, "🗣️ " + n + " · " + by[n] + " recording" + (by[n] === 1 ? "" : "s")));
+      var del = el("button", "ghost-btn", "Delete");
+      del.onclick = function () {
+        wakeTemplates = wakeTemplates.filter(function (t) { return t.who !== n; });
+        saveTemplates().then(renderWakeVoices);
+      };
+      row.appendChild(del); box.appendChild(row);
     });
   }
-  function startPicovoice() {
-    var p = window.PorcupineWeb ? Promise.resolve() : loadScript("/vendor/web-voice-processor.js").then(function () { return loadScript("/vendor/porcupine-web.js"); });
-    return p.then(function () { return api("/api/settings?wake=1"); }).then(function (s) {
-      return PorcupineWeb.PorcupineWorker.create(
-        settings.picovoiceKey,
-        [{ label: "Hey Silly Milly", base64: s.wakeWordBase64, sensitivity: settings.sensitivity || 0.6 }],
-        function () { if (!millyBusy) openMilly(true); },
-        { publicPath: "/wake/porcupine_params.pv", forceWrite: false, version: 4 },
-        { processErrorCallback: function (err) { wakeError = String(err && err.message || err); updateWakeBadge(); } }
-      );
-    }).then(function (worker) {
-      porcupine = worker;
-      return resumeWake();
+  function saveTemplates() {
+    return api("/api/settings", { method: "POST", body: { wakeTemplates: wakeTemplates } }).then(function () {
+      if (window.MillyWake) return MillyWake.setTemplates(wakeTemplates);
+    }).then(function () { updateWakeBadge(); if (wakeEngine === "local" && !MillyWake.running()) resumeWake(); });
+  }
+  function recordVoice() {
+    if (enrollingNow) return;
+    if (!window.MillyWake || !MillyWake.supported) { $("wake-rec-status").textContent = "This browser can't record for the wake word. Use Chrome."; return; }
+    var who = ($("wake-who").value || "").trim().slice(0, 30) || "Family";
+    var st = $("wake-rec-status"), btn = $("wake-record");
+    enrollingNow = true; btn.disabled = true;
+    var got = [], tries = 0;
+    function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+    function take() {
+      if (got.length >= 3 || tries >= 6) return Promise.resolve();
+      tries++;
+      st.className = "wake-rec-status";
+      st.textContent = "Get ready… (" + (got.length + 1) + " of 3)";
+      return wait(900).then(function () {
+        tone(880, 0, 0.12, 0.15);
+        return wait(250);
+      }).then(function () {
+        st.className = "wake-rec-status rec";
+        st.textContent = "🔴 Say “Hey Silly Milly” now (" + (got.length + 1) + " of 3)";
+        return MillyWake.enrollOnce(2400);
+      }).then(function (r) {
+        st.className = "wake-rec-status";
+        if (r.ok) { got.push({ who: who, frames: r.frames }); st.textContent = "👍 Got it."; }
+        else st.textContent = "🤔 " + r.reason;
+        return wait(900).then(take);
+      });
+    }
+    pauseWake().then(function () { return MillyWake.start(); }).then(take).then(function () {
+      if (got.length) {
+        wakeTemplates = wakeTemplates.concat(got);
+        return saveTemplates().then(function () {
+          st.textContent = got.length >= 3 ? "✅ Saved " + who + "'s voice. Try it: say “Hey Silly Milly”." : "Saved " + got.length + " of 3. You can record again to add more.";
+          renderWakeVoices();
+        });
+      }
+      st.textContent = "Nothing saved. Try again a bit closer to the tablet.";
     }).catch(function (err) {
-      wakeError = "Picovoice: " + String(err && err.message || err);
-      wakeActive = false; updateWakeBadge();
-    });
+      var m = String(err && (err.name || err.message) || err);
+      st.textContent = /NotAllowed|Permission/i.test(m) ? "The microphone is blocked. In Chrome, open Site settings and set Microphone to Allow." : "Couldn't record: " + m;
+    }).then(function () {
+      enrollingNow = false; btn.disabled = false;
+      return MillyWake.stop();
+    }).then(function () { if (wakeEngine) resumeWake(); });
   }
 
   // ---------- settings ----------
   function loadSettings() {
     return api("/api/settings").then(function (s) { settings = s; }).catch(function () {});
   }
-  var pendingPpn = null;
   function renderSettings() {
-    $("set-wake-mode").value = settings.wakeMode || "";
-    $("set-pv-key").value = settings.picovoiceKey || "";
-    $("set-sens").value = settings.sensitivity || 0.6;
-    $("set-sens-val").textContent = "(" + (settings.sensitivity || 0.6) + ")";
-    $("set-ppn-status").textContent = settings.hasWakeWord ? "A wake word file is saved." : "No wake word file yet.";
+    $("set-wake-mode").value = settings.wakeMode === "chrome" || settings.wakeMode === "off" ? settings.wakeMode : "";
+    $("set-sens").value = settings.wakeSens || 5;
+    $("set-sens-val").textContent = "(" + (settings.wakeSens || 5) + " of 10)";
+    renderWakeVoices();
     loadVoices();
     var sel = $("set-voice"); sel.innerHTML = "";
     var auto = el("option", null, "Automatic"); auto.value = ""; sel.appendChild(auto);
@@ -1044,15 +1117,12 @@
   }
   function saveSettings() {
     var body = {
-      picovoiceKey: $("set-pv-key").value.trim(),
-      sensitivity: parseFloat($("set-sens").value),
+      wakeSens: parseInt($("set-sens").value, 10),
       voiceName: $("set-voice").value,
       timeZone: $("set-tz").value,
       wakeMode: $("set-wake-mode").value
     };
-    if (pendingPpn) body.wakeWordBase64 = pendingPpn;
     api("/api/settings", { method: "POST", body: body }).then(function () {
-      pendingPpn = null;
       return loadSettings();
     }).then(function () {
       renderSettings();
@@ -1099,16 +1169,12 @@
     $("set-reload").onclick = function () { location.reload(); };
     $("set-forget").onclick = function () { storeDel("familyPin"); pin = ""; location.reload(); };
     $("set-test-voice").onclick = function () { settings.voiceName = $("set-voice").value; say("Hi! I'm Silly Milly. Ask me anything!"); };
-    $("set-sens").oninput = function () { $("set-sens-val").textContent = "(" + this.value + ")"; };
-    $("set-ppn").onchange = function () {
-      var f = this.files && this.files[0]; if (!f) return;
-      var reader = new FileReader();
-      reader.onload = function () {
-        pendingPpn = String(reader.result).split(",")[1] || "";
-        $("set-ppn-status").textContent = "Ready to save: " + f.name;
-      };
-      reader.readAsDataURL(f);
+    $("set-sens").oninput = function () {
+      $("set-sens-val").textContent = "(" + this.value + " of 10)";
+      settings.wakeSens = parseInt(this.value, 10);
+      if (window.MillyWake) MillyWake.setThreshold(wakeThreshold());
     };
+    $("wake-record").onclick = recordVoice;
     $("dimmer").onclick = function () { $("dimmer").classList.add("hidden"); dimmedByUser = true; lastTouch = Date.now(); };
     document.addEventListener("pointerdown", function () { lastTouch = Date.now(); }, true);
     if (window.speechSynthesis) speechSynthesis.onvoiceschanged = loadVoices;

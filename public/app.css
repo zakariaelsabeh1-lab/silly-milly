@@ -299,3 +299,17 @@ body[data-sky="night"] { --sky-1: #0f1424; }
   .view.home.active { display: flex; flex-direction: column; overflow-y: auto; }
   .h-bottom { grid-template-columns: 1fr 1fr; }
 }
+
+/* Wake word settings */
+.set-card h4 { margin: 14px 0 4px; font-size: 1rem; }
+.wake-status { margin: 6px 0 4px; font-weight: 600; }
+.wake-rec-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+.wake-rec-row input { flex: 1 1 200px; min-width: 0; }
+.wake-rec-status { min-height: 1.6em; font-size: 1.15rem; font-weight: 600; margin: 4px 0; }
+.wake-rec-status.rec { color: #ff6b6b; }
+.wake-voices { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 10px; }
+.wake-voice { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: rgba(255,255,255,0.05); border-radius: 10px; padding: 6px 10px; }
+.wake-meter { height: 14px; border-radius: 7px; background: rgba(255,255,255,0.08); overflow: hidden; margin-top: 8px; }
+#wake-meter-bar { height: 100%; width: 0; background: #8fd3ff; transition: width .25s; }
+#wake-meter-bar.near { background: #ffd166; }
+#wake-meter-bar.hit { background: #3ccf7a; }
