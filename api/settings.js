@@ -1,7 +1,8 @@
 // Tablet settings that should survive a browser reset (wake word key + file).
 // GET  /api/settings          -> { picovoiceKey, hasWakeWord, sensitivity, voiceName }
 // GET  /api/settings?wake=1   -> also includes wakeWordBase64
-// POST /api/settings {picovoiceKey?, wakeWordBase64?, sensitivity?, voiceName?}
+// POST /api/settings {picovoiceKey?, wakeWordBase64?, sensitivity?, voiceName?, timeZone?, wakeMode?}
+// wakeMode: "" (automatic: Picovoice if set up, otherwise Chrome's built-in listening), "chrome", "picovoice", "off"
 import { send, readBody, query, checkAuth } from "../lib/http.js";
 import { getKey, setKey } from "../lib/store.js";
 
@@ -20,6 +21,7 @@ export default async function handler(req, res) {
         sensitivity: s.sensitivity ?? 0.6,
         voiceName: s.voiceName || "",
         timeZone: s.timeZone || "",
+        wakeMode: s.wakeMode || "",
         assistantReady: Boolean(process.env.ANTHROPIC_API_KEY),
       };
       if (query(req).wake) out.wakeWordBase64 = s.wakeWordBase64 || "";
@@ -39,6 +41,7 @@ export default async function handler(req, res) {
         if (z === "" || z === "auto" || validZone(z)) s.timeZone = z;
         else return send(res, 400, { error: "Unknown time zone" });
       }
+      if (typeof b.wakeMode === "string" && ["", "chrome", "picovoice", "off"].includes(b.wakeMode)) s.wakeMode = b.wakeMode;
       await setKey("settings", s);
       return send(res, 200, { ok: true });
     }

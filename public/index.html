@@ -130,12 +130,18 @@
         <div class="bed-title">Settings</div>
         <div class="set-card">
           <h3>"Hey Silly Milly" wake word</h3>
-          <p class="muted">Optional. Without it, tap the Milly button to talk. See SETUP.md for how to get these from Picovoice.</p>
+          <label>How to listen<select id="set-wake-mode">
+            <option value="">Automatic (built-in, or Picovoice once it is added)</option>
+            <option value="chrome">Built-in Chrome listening</option>
+            <option value="picovoice">Picovoice (needs AccessKey and .ppn file)</option>
+            <option value="off">Off (tap the Milly button to talk)</option>
+          </select></label>
+          <div id="wake-status" class="muted"></div>
+          <p class="muted">Built-in listening works with no account. Picovoice is optional and only used if you add both items below. See SETUP.md.</p>
           <label>Picovoice AccessKey<input id="set-pv-key" type="password" autocomplete="off" placeholder="Paste AccessKey"></label>
           <label>Wake word file (.ppn for Web)<input id="set-ppn" type="file" accept=".ppn"></label>
           <div id="set-ppn-status" class="muted"></div>
-          <label>Sensitivity <span id="set-sens-val"></span><input id="set-sens" type="range" min="0.3" max="0.9" step="0.05"></label>
-          <div id="wake-status" class="muted"></div>
+          <label>Picovoice sensitivity <span id="set-sens-val"></span><input id="set-sens" type="range" min="0.3" max="0.9" step="0.05"></label>
         </div>
         <div class="set-card">
           <h3>Time zone</h3>

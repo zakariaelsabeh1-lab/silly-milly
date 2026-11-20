@@ -14,7 +14,7 @@ A wall-tablet dashboard for the family: big clock, Prince George weather and air
   - `settings.js`: wake word key and file, voice choice.
 - `lib/store.js` saves data in Upstash Redis (free), or a local JSON file when testing on a computer.
 - Weather and air quality come from Open-Meteo (free, no key).
-- Wake word: Picovoice Porcupine Web (files in `public/vendor` and `public/wake`). Speech-to-text and the voice use Chrome's built-in Web Speech features.
+- Wake word: by default Chrome's built-in speech recognition listens continuously for "Hey Silly Milly" (no key). Optional Picovoice Porcupine Web (files in `public/vendor` and `public/wake`) is used instead once an AccessKey and .ppn are saved. Speech-to-text and the voice use Chrome's built-in Web Speech features.
 
 ## Environment variables (set in Vercel)
 

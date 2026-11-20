@@ -197,6 +197,7 @@
     if (!night) dimmedByUser = false;
     if (night && !dimmedByUser && Date.now() - lastTouch > 5 * 60000 && !millyBusy) $("dimmer").classList.remove("hidden");
     if (!night) $("dimmer").classList.add("hidden");
+    wakeMinute();
     // Go back to the main screen when nobody's touched it
     if (Date.now() - lastTouch > CONFIG.idleMinutes * 60000 && !millyBusy && $("modal").classList.contains("hidden")) {
       var dv = defaultView();
@@ -703,7 +704,7 @@
 
   // ---------- speech out ----------
   var voices = [];
-  var settings = { voiceName: "", picovoiceKey: "", hasWakeWord: false, sensitivity: 0.6 };
+  var settings = { voiceName: "", picovoiceKey: "", hasWakeWord: false, sensitivity: 0.6, wakeMode: "" };
   function loadVoices() { try { voices = window.speechSynthesis ? speechSynthesis.getVoices() : []; } catch (e) { voices = []; } }
   function pickVoice() {
     if (!voices.length) loadVoices();
@@ -823,16 +824,183 @@
     });
   }
 
-  // ---------- "Hey Silly Milly" wake word (Picovoice Porcupine, optional) ----------
-  var porcupine = null, wakeActive = false, wakeError = "";
+  // ---------- "Hey Silly Milly" wake word ----------
+  // Two engines:
+  //  "chrome":    Chrome's own speech-to-text listens all the time and we look for the phrase in
+  //               what it hears. No key or account needed. This is the default.
+  //  "picovoice": Picovoice Porcupine, on-device. Needs an AccessKey and a .ppn file.
+  // Only one thing can use the microphone at a time, so the wake word pauses while Milly listens.
+  var wakeEngine = null, wakeActive = false, wakeError = "";
+  function wantedEngine() {
+    var m = settings.wakeMode || "";
+    var pvReady = settings.picovoiceKey && settings.hasWakeWord;
+    if (m === "off") return null;
+    if (m === "picovoice") return pvReady ? "picovoice" : null;
+    if (m === "chrome") return SR ? "chrome" : null;
+    return pvReady ? "picovoice" : SR ? "chrome" : null;
+  }
+  function startWake() {
+    stopWake();
+    var eng = wantedEngine();
+    if (!eng) {
+      var m = settings.wakeMode || "";
+      wakeError = m === "off" ? "turned off in Settings." : m === "picovoice" ? "Picovoice isn't set up yet (needs the AccessKey and .ppn file)." : "this browser can't listen. Use Chrome.";
+      updateWakeBadge(); return Promise.resolve();
+    }
+    wakeEngine = eng; wakeError = "";
+    return eng === "picovoice" ? startPicovoice() : resumeWake();
+  }
+  function stopWake() {
+    if (wakeEngine === "picovoice" && porcupine) {
+      try { WebVoiceProcessor.WebVoiceProcessor.unsubscribe(porcupine); porcupine.terminate(); } catch (e) {}
+      porcupine = null;
+    }
+    if (wakeEngine === "chrome") chromeWakeStop();
+    wakeEngine = null; wakeActive = false; updateWakeBadge();
+  }
+  function pauseWake() {
+    if (wakeEngine === "chrome") return chromeWakeStop();
+    if (!porcupine || !wakeActive) return Promise.resolve();
+    wakeActive = false; updateWakeBadge();
+    // Release the microphone so speech recognition can use it.
+    return WebVoiceProcessor.WebVoiceProcessor.unsubscribe(porcupine).catch(function () {});
+  }
+  function resumeWake() {
+    if (wakeEngine === "chrome") { chromeWakeStart(0); return Promise.resolve(); }
+    if (!porcupine || wakeActive) return Promise.resolve();
+    return WebVoiceProcessor.WebVoiceProcessor.subscribe(porcupine).then(function () {
+      wakeActive = true; wakeError = ""; updateWakeBadge();
+    }).catch(function (err) { wakeError = String(err && err.message || err); updateWakeBadge(); });
+  }
+  function wakeQuietTime() {
+    return between(hm(now()), CONFIG.nightDim.from, CONFIG.nightDim.to);
+  }
+  function updateWakeBadge() {
+    $("milly-btn").classList.toggle("wake-on", wakeActive);
+    var s = $("wake-status");
+    if (!s) return;
+    var how = wakeEngine === "picovoice" ? " (Picovoice)" : " (built-in Chrome listening)";
+    if (wakeActive) s.textContent = "✅ Listening for \"Hey Silly Milly\"" + how + ".";
+    else if (wakeEngine === "chrome" && wakeQuietTime()) s.textContent = "😴 Sleeping for the night (" + to12(CONFIG.nightDim.from) + " to " + to12(CONFIG.nightDim.to) + "). Tap Milly to talk.";
+    else if (wakeEngine && !wakeError) s.textContent = "Paused while Milly is talking.";
+    else s.textContent = "Wake word off: " + (wakeError || "not set up.");
+  }
+
+  // --- Chrome built-in listening ---
+  var cw = { rec: null, timer: null, want: false, delay: 0, quickEnds: 0, startedAt: 0, stopping: null };
+  // Phrases Chrome tends to hear for "Hey Silly Milly".
+  var WAKE_RE = /\b(?:(?:hey|hay|hi|hello|okay|ok|a|yo)\s+)?(?:silly|sili|silli|sillie|sully|sally|selly|seely|cilly|chilly|really|filly|hilly|tilly|lily|lilly)\s*(?:milly|millie|milli|mili|mily|mille|molly|melly|mellie|meli|mollie|milly's|millies|minnie|mini|meeli)\b|\bhey\s+(?:milly|millie|milli|mili)\b/;
+  function normalize(t) { return " " + String(t).toLowerCase().replace(/[^a-z' ]+/g, " ").replace(/\s+/g, " ").trim() + " "; }
+  function findWake(t) {
+    var n = normalize(t), m = WAKE_RE.exec(n);
+    if (!m) return null;
+    return { rest: n.slice(m.index + m[0].length).trim() };
+  }
+  window.__millyFindWake = findWake; // for testing
+  function chromeWakeStart(delay) {
+    cw.want = true;
+    clearTimeout(cw.timer);
+    cw.timer = setTimeout(chromeWakeRun, delay || 0);
+  }
+  function chromeWakeStop() {
+    cw.want = false;
+    clearTimeout(cw.timer);
+    wakeActive = false; updateWakeBadge();
+    if (!cw.rec) return Promise.resolve();
+    if (cw.stopping) return cw.stopping;
+    var r = cw.rec;
+    cw.stopping = new Promise(function (res) {
+      var t = setTimeout(res, 600);
+      r.addEventListener("end", function () { clearTimeout(t); res(); });
+      try { r.abort(); } catch (e) { clearTimeout(t); res(); }
+    }).then(function () { cw.rec = null; cw.stopping = null; });
+    return cw.stopping;
+  }
+  function chromeWakeRun() {
+    if (!cw.want || cw.rec || millyBusy || wakeEngine !== "chrome") return;
+    if (document.visibilityState !== "visible" || wakeQuietTime()) { wakeActive = false; updateWakeBadge(); return; }
+    var r = new SR();
+    cw.rec = r;
+    r.lang = "en-CA"; r.continuous = true; r.interimResults = true; r.maxAlternatives = 3;
+    var fired = false, pending = null;
+    function fire(rest) {
+      if (fired) return; fired = true;
+      cw.want = false;
+      try { r.abort(); } catch (e) {}
+      if (millyBusy) return;
+      if (rest && rest.split(" ").length >= 2) openMillyWith(rest);
+      else openMilly(true);
+    }
+    r.onresult = function (ev) {
+      if (fired) return;
+      for (var i = ev.resultIndex; i < ev.results.length; i++) {
+        var res = ev.results[i];
+        for (var a = 0; a < res.length; a++) {
+          var hit = findWake(res[a].transcript);
+          if (!hit) continue;
+          if (res.isFinal) { fire(hit.rest); return; }
+          // Heard the name mid-sentence: wait a moment for the rest of the question.
+          pending = hit;
+          clearTimeout(cw.pendTimer);
+          cw.pendTimer = setTimeout(function () { if (pending) fire(""); }, 1800);
+          return;
+        }
+      }
+    };
+    r.onerror = function (ev) {
+      var e = ev && ev.error;
+      if (e === "not-allowed" || e === "service-not-allowed") {
+        cw.want = false; wakeError = "the microphone is blocked. In Chrome, tap the lock icon (or Site settings) and set Microphone to Allow, then reload.";
+      } else if (e === "network") { cw.delay = Math.min((cw.delay || 2000) * 2, 60000); wakeError = ""; }
+      else if (e === "audio-capture") { cw.delay = 5000; }
+    };
+    r.onstart = function () { cw.startedAt = Date.now(); wakeActive = true; wakeError = ""; updateWakeBadge(); };
+    r.onend = function () {
+      clearTimeout(cw.pendTimer);
+      if (cw.rec === r) cw.rec = null;
+      if (pending && !fired) { fire(pending.rest); }
+      wakeActive = false;
+      if (!cw.want || millyBusy) { updateWakeBadge(); return; }
+      // Chrome stops listening every so often; start again. Back off if it keeps ending instantly.
+      var ran = Date.now() - (cw.startedAt || Date.now());
+      cw.quickEnds = ran < 1500 ? cw.quickEnds + 1 : 0;
+      var wait = cw.delay || (cw.quickEnds > 3 ? Math.min(1000 * cw.quickEnds, 15000) : 250);
+      if (ran > 10000) cw.delay = 0;
+      updateWakeBadge();
+      chromeWakeStart(wait);
+    };
+    try { r.start(); } catch (e) { cw.rec = null; chromeWakeStart(2000); }
+  }
+  // Sleep the built-in listening overnight (fewer beeps, less battery), wake it in the morning.
+  function wakeMinute() {
+    if (wakeEngine !== "chrome" || millyBusy) return;
+    if (wakeQuietTime()) { if (cw.rec) chromeWakeStop(); updateWakeBadge(); }
+    else if (!cw.rec && document.visibilityState === "visible") chromeWakeStart(0);
+  }
+  // "Hey Silly Milly, what's the weather tomorrow?" in one breath: answer straight away.
+  function openMillyWith(text) {
+    lastTouch = Date.now();
+    $("dimmer").classList.add("hidden");
+    $("milly-panel").classList.remove("hidden");
+    $("milly-heard").textContent = ""; $("milly-reply").textContent = "";
+    millyBusy = true;
+    pauseWake().then(function () { wakeSound(); ask(text); });
+  }
+  document.addEventListener("visibilitychange", function () {
+    if (wakeEngine !== "chrome") return;
+    if (document.visibilityState === "visible") { if (!millyBusy) chromeWakeStart(500); }
+    else chromeWakeStop();
+  });
+
+  // --- Picovoice Porcupine ---
+  var porcupine = null;
   function loadScript(src) {
     return new Promise(function (res, rej) {
       var s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = function () { rej(new Error("Couldn't load " + src)); };
       document.head.appendChild(s);
     });
   }
-  function startWake() {
-    if (!settings.picovoiceKey || !settings.hasWakeWord) { wakeError = "Not set up (optional)."; updateWakeBadge(); return Promise.resolve(); }
+  function startPicovoice() {
     var p = window.PorcupineWeb ? Promise.resolve() : loadScript("/vendor/web-voice-processor.js").then(function () { return loadScript("/vendor/porcupine-web.js"); });
     return p.then(function () { return api("/api/settings?wake=1"); }).then(function (s) {
       return PorcupineWeb.PorcupineWorker.create(
@@ -846,26 +1014,9 @@
       porcupine = worker;
       return resumeWake();
     }).catch(function (err) {
-      wakeError = String(err && err.message || err);
+      wakeError = "Picovoice: " + String(err && err.message || err);
       wakeActive = false; updateWakeBadge();
     });
-  }
-  function pauseWake() {
-    if (!porcupine || !wakeActive) return Promise.resolve();
-    wakeActive = false; updateWakeBadge();
-    // Release the microphone so speech recognition can use it.
-    return WebVoiceProcessor.WebVoiceProcessor.unsubscribe(porcupine).catch(function () {});
-  }
-  function resumeWake() {
-    if (!porcupine || wakeActive) return Promise.resolve();
-    return WebVoiceProcessor.WebVoiceProcessor.subscribe(porcupine).then(function () {
-      wakeActive = true; wakeError = ""; updateWakeBadge();
-    }).catch(function (err) { wakeError = String(err && err.message || err); updateWakeBadge(); });
-  }
-  function updateWakeBadge() {
-    $("milly-btn").classList.toggle("wake-on", wakeActive);
-    var s = $("wake-status");
-    if (s) s.textContent = wakeActive ? "✅ Listening for \"Hey Silly Milly\"." : porcupine ? "Paused." : "Wake word off: " + (wakeError || "not set up.");
   }
 
   // ---------- settings ----------
@@ -874,6 +1025,7 @@
   }
   var pendingPpn = null;
   function renderSettings() {
+    $("set-wake-mode").value = settings.wakeMode || "";
     $("set-pv-key").value = settings.picovoiceKey || "";
     $("set-sens").value = settings.sensitivity || 0.6;
     $("set-sens-val").textContent = "(" + (settings.sensitivity || 0.6) + ")";
@@ -900,7 +1052,8 @@
       picovoiceKey: $("set-pv-key").value.trim(),
       sensitivity: parseFloat($("set-sens").value),
       voiceName: $("set-voice").value,
-      timeZone: $("set-tz").value
+      timeZone: $("set-tz").value,
+      wakeMode: $("set-wake-mode").value
     };
     if (pendingPpn) body.wakeWordBase64 = pendingPpn;
     api("/api/settings", { method: "POST", body: body }).then(function () {
@@ -910,7 +1063,6 @@
       renderSettings();
       lastMinute = ""; tick(); loadUpcoming(); renderBedtime();
       $("set-status").appendChild(el("div", null, "Saved. Starting the wake word…"));
-      if (porcupine) { try { WebVoiceProcessor.WebVoiceProcessor.unsubscribe(porcupine); porcupine.terminate(); } catch (e) {} porcupine = null; wakeActive = false; }
       startWake();
     }).catch(function (e) { $("set-status").appendChild(el("div", null, "Couldn't save: " + e.message)); });
   }
