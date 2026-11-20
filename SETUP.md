@@ -83,6 +83,8 @@ Good to know:
 - **Kindness reminder**: a short line about being kind, good manners and listening to parents and teachers shows on the morning and bedtime screens (a different one each day) and Milly says it at 7:00 AM and 8:00 PM.
 - **Bedtime**: at 7:30 PM the screen switches to the bedtime checklist and Milly announces it. At 7:45 she says what each child still has to do. At 8:00 she calls stories. When a list is finished, there's a celebration. **History** shows the last 14 days, with Noah's puffer in its own highlighted column. You can also ask: "Hey Silly Milly, did Noah do his puffer last night?"
 - **Calendar**: tap a day to see it, **+ Add event** to add one, tap an event to edit or delete it. Or by voice: "Hey Silly Milly, add Didi's dentist appointment next Tuesday at 3:30." Repeating events (weekly swimming, yearly birthdays) are supported.
+- **News**: tap **📰 News** in the side menu (it's never on the main screen, so the kids don't see it by default). Two tabs: *Prince George & BC* and *Canada & World*. Headlines refresh every 15 minutes; tap one to open the story. Sources are listed in `lib/news.js` (FEEDS) and can be swapped for any RSS feed.
+- **Weather** refreshes every 15 minutes.
 - **Questions**: anything you'd ask Alexa: weather, air quality, sports scores, homework help, jokes, stories.
 - If nobody touches the screen for 3 minutes, it goes back to the home screen (or the bedtime screen during bedtime).
 

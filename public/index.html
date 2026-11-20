@@ -25,6 +25,7 @@
     <button data-view="morning" class="nav-btn"><span>☀️</span>Morning</button>
     <button data-view="bedtime" class="nav-btn"><span>🛏️</span>Bedtime</button>
     <button data-view="calendar" class="nav-btn"><span>📅</span>Calendar</button>
+    <button data-view="news" class="nav-btn"><span>📰</span>News</button>
     <div class="nav-spacer"></div>
     <button data-view="settings" class="nav-btn small"><span>⚙️</span></button>
   </nav>
@@ -134,6 +135,19 @@
           <button id="add-event-btn" class="big-btn">+ Add event</button>
         </div>
       </div>
+    </section>
+
+    <!-- NEWS (only when someone opens it, so it's not on the kids' main screen) -->
+    <section id="view-news" class="view">
+      <div class="bed-head">
+        <div class="bed-title">News</div>
+        <div class="news-tabs">
+          <button data-news="local" class="news-tab active">Prince George &amp; BC</button>
+          <button data-news="world" class="news-tab">Canada &amp; World</button>
+        </div>
+        <div id="news-updated" class="muted news-updated"></div>
+      </div>
+      <div id="news-list" class="news-list"></div>
     </section>
 
     <!-- SETTINGS -->

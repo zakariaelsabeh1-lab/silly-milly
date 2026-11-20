@@ -189,6 +189,7 @@
     if (name === "calendar") loadMonth();
     if (name === "history") loadHistory();
     if (name === "settings") renderSettings();
+    if (name === "news") loadNews();
   }
   function morningDay() { var d = now().getDay(); return !CONFIG.morning.weekdaysOnly || (d >= 1 && d <= 5); }
   function defaultView() {
@@ -255,7 +256,7 @@
       var dv = defaultView();
       if (currentView !== dv) showView(dv);
     }
-    if (d.getMinutes() % 30 === 0) loadWeather();
+    if (d.getMinutes() % 15 === 0) { loadWeather(); if (currentView === "news") loadNews(); }
     if (d.getMinutes() % 5 === 0) { loadUpcoming(); if (currentView === "bedtime" || currentView === "morning") loadToday(); }
   }
 
@@ -648,6 +649,41 @@
       box.appendChild(table);
       box.appendChild(el("p", "muted", "The 💨 column is Noah's puffer. Times show when it was ticked."));
     }).catch(function (e) { $("history-table").textContent = "Couldn't load history: " + e.message; });
+  }
+
+  // ---------- news ----------
+  var news = null, newsTab = "local", newsLoadedAt = 0;
+  function timeAgo(t) {
+    if (!t) return "";
+    var m = Math.round((Date.now() - t) / 60000);
+    if (m < 1) return "just now";
+    if (m < 60) return m + " min ago";
+    var h = Math.round(m / 60);
+    if (h < 24) return h + " h ago";
+    var d = Math.round(h / 24);
+    return d === 1 ? "yesterday" : d + " days ago";
+  }
+  function loadNews() {
+    renderNews();
+    if (news && Date.now() - newsLoadedAt < 5 * 60000) return;
+    api("/api/news").then(function (r) { news = r; newsLoadedAt = Date.now(); renderNews(); })
+      .catch(function (e) { if (!news) { $("news-list").innerHTML = ""; $("news-list").appendChild(el("div", "news-empty", "Couldn't load the news right now. " + e.message)); } });
+  }
+  function renderNews() {
+    var tabs = document.querySelectorAll(".news-tab");
+    for (var i = 0; i < tabs.length; i++) tabs[i].classList.toggle("active", tabs[i].getAttribute("data-news") === newsTab);
+    var box = $("news-list"); box.innerHTML = "";
+    if (!news) { box.appendChild(el("div", "news-empty", "Loading headlines…")); return; }
+    $("news-updated").textContent = "Updated " + timeAgo(news.fetchedAt);
+    var items = news[newsTab] || [];
+    if (!items.length) { box.appendChild(el("div", "news-empty", "No headlines right now. Try again later.")); return; }
+    items.forEach(function (it) {
+      var b = el("button", "news-item");
+      b.appendChild(el("div", "news-title", it.title));
+      b.appendChild(el("div", "news-meta", it.source + (it.time ? " · " + timeAgo(it.time) : "")));
+      b.onclick = function () { window.open(it.link, "_blank", "noopener"); };
+      box.appendChild(b);
+    });
   }
 
   // ---------- celebration + sounds ----------
@@ -1261,6 +1297,10 @@
     var tiles = document.querySelectorAll("[data-go]");
     for (var ti = 0; ti < tiles.length; ti++) {
       (function (b) { b.onclick = function () { showView(b.getAttribute("data-go")); }; })(tiles[ti]);
+    }
+    var ntabs = document.querySelectorAll(".news-tab");
+    for (var ni = 0; ni < ntabs.length; ni++) {
+      (function (b) { b.onclick = function () { newsTab = b.getAttribute("data-news"); renderNews(); }; })(ntabs[ni]);
     }
     $("bed-history-btn").onclick = function () { historyRoutine = "bedtime"; showView("history"); };
     $("morning-history-btn").onclick = function () { historyRoutine = "morning"; showView("history"); };
