@@ -837,14 +837,14 @@
     if (m === "off") return null;
     if (m === "picovoice") return pvReady ? "picovoice" : null;
     if (m === "chrome") return SR ? "chrome" : null;
-    return pvReady ? "picovoice" : SR ? "chrome" : null;
+    return pvReady ? "picovoice" : null; // built-in Chrome listening is opt-in (it beeps on Android)
   }
   function startWake() {
     stopWake();
     var eng = wantedEngine();
     if (!eng) {
       var m = settings.wakeMode || "";
-      wakeError = m === "off" ? "turned off in Settings." : m === "picovoice" ? "Picovoice isn't set up yet (needs the AccessKey and .ppn file)." : "this browser can't listen. Use Chrome.";
+      wakeError = m === "off" ? "turned off in Settings." : m === "picovoice" ? "Picovoice isn't set up yet (needs the AccessKey and .ppn file)." : m === "chrome" ? "this browser can't listen. Use Chrome." : "";
       updateWakeBadge(); return Promise.resolve();
     }
     wakeEngine = eng; wakeError = "";
@@ -876,20 +876,23 @@
     return between(hm(now()), CONFIG.nightDim.from, CONFIG.nightDim.to);
   }
   function updateWakeBadge() {
-    $("milly-btn").classList.toggle("wake-on", wakeActive);
+    // The green dot is for Picovoice only. With Chrome listening, Android already shows its own mic light.
+    $("milly-btn").classList.toggle("wake-on", wakeActive && wakeEngine === "picovoice");
     var s = $("wake-status");
     if (!s) return;
     var how = wakeEngine === "picovoice" ? " (Picovoice)" : " (built-in Chrome listening)";
     if (wakeActive) s.textContent = "✅ Listening for \"Hey Silly Milly\"" + how + ".";
     else if (wakeEngine === "chrome" && wakeQuietTime()) s.textContent = "😴 Sleeping for the night (" + to12(CONFIG.nightDim.from) + " to " + to12(CONFIG.nightDim.to) + "). Tap Milly to talk.";
     else if (wakeEngine && !wakeError) s.textContent = "Paused while Milly is talking.";
+    else if (!wakeEngine && !settings.wakeMode && !wakeError) s.textContent = "Hands-free is off. Tap the Milly button to talk.";
     else s.textContent = "Wake word off: " + (wakeError || "not set up.");
   }
 
   // --- Chrome built-in listening ---
   var cw = { rec: null, timer: null, want: false, delay: 0, quickEnds: 0, startedAt: 0, stopping: null };
   // Phrases Chrome tends to hear for "Hey Silly Milly".
-  var WAKE_RE = /\b(?:(?:hey|hay|hi|hello|okay|ok|a|yo)\s+)?(?:silly|sili|silli|sillie|sully|sally|selly|seely|cilly|chilly|really|filly|hilly|tilly|lily|lilly)\s*(?:milly|millie|milli|mili|mily|mille|molly|melly|mellie|meli|mollie|milly's|millies|minnie|mini|meeli)\b|\bhey\s+(?:milly|millie|milli|mili)\b/;
+  // Tight match: "silly milly" (optionally "hey"/"hi"/"okay" first). Nothing else wakes her.
+  var WAKE_RE = /\b(?:(?:hey|hi|okay|ok)\s+)?(?:silly|silli|sili)\s*(?:milly|millie|milli|mili)\b/;
   function normalize(t) { return " " + String(t).toLowerCase().replace(/[^a-z' ]+/g, " ").replace(/\s+/g, " ").trim() + " "; }
   function findWake(t) {
     var n = normalize(t), m = WAKE_RE.exec(n);
@@ -922,7 +925,7 @@
     var r = new SR();
     cw.rec = r;
     r.lang = "en-CA"; r.continuous = true; r.interimResults = true; r.maxAlternatives = 3;
-    var fired = false, pending = null;
+    var fired = false;
     function fire(rest) {
       if (fired) return; fired = true;
       cw.want = false;
@@ -935,15 +938,10 @@
       if (fired) return;
       for (var i = ev.resultIndex; i < ev.results.length; i++) {
         var res = ev.results[i];
+        if (!res.isFinal) continue; // only act on what Chrome is sure it heard
         for (var a = 0; a < res.length; a++) {
           var hit = findWake(res[a].transcript);
-          if (!hit) continue;
-          if (res.isFinal) { fire(hit.rest); return; }
-          // Heard the name mid-sentence: wait a moment for the rest of the question.
-          pending = hit;
-          clearTimeout(cw.pendTimer);
-          cw.pendTimer = setTimeout(function () { if (pending) fire(""); }, 1800);
-          return;
+          if (hit) { fire(hit.rest); return; }
         }
       }
     };
@@ -954,19 +952,16 @@
       } else if (e === "network") { cw.delay = Math.min((cw.delay || 2000) * 2, 60000); wakeError = ""; }
       else if (e === "audio-capture") { cw.delay = 5000; }
     };
-    r.onstart = function () { cw.startedAt = Date.now(); wakeActive = true; wakeError = ""; updateWakeBadge(); };
+    r.onstart = function () { cw.startedAt = Date.now(); if (!wakeActive) { wakeActive = true; wakeError = ""; updateWakeBadge(); } };
     r.onend = function () {
-      clearTimeout(cw.pendTimer);
       if (cw.rec === r) cw.rec = null;
-      if (pending && !fired) { fire(pending.rest); }
-      wakeActive = false;
-      if (!cw.want || millyBusy) { updateWakeBadge(); return; }
+      if (!cw.want || millyBusy) { wakeActive = false; updateWakeBadge(); return; }
       // Chrome stops listening every so often; start again. Back off if it keeps ending instantly.
       var ran = Date.now() - (cw.startedAt || Date.now());
       cw.quickEnds = ran < 1500 ? cw.quickEnds + 1 : 0;
-      var wait = cw.delay || (cw.quickEnds > 3 ? Math.min(1000 * cw.quickEnds, 15000) : 250);
+      // Each restart can beep on Android, so don't restart in a tight loop.
+      var wait = cw.delay || (cw.quickEnds > 2 ? Math.min(2000 * cw.quickEnds, 20000) : 1000);
       if (ran > 10000) cw.delay = 0;
-      updateWakeBadge();
       chromeWakeStart(wait);
     };
     try { r.start(); } catch (e) { cw.rec = null; chromeWakeStart(2000); }

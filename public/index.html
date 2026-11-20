@@ -131,13 +131,13 @@
         <div class="set-card">
           <h3>"Hey Silly Milly" wake word</h3>
           <label>How to listen<select id="set-wake-mode">
-            <option value="">Automatic (built-in, or Picovoice once it is added)</option>
-            <option value="chrome">Built-in Chrome listening</option>
+            <option value="">Tap Milly to talk (uses Picovoice once it is added)</option>
+            <option value="chrome">Always listen with Chrome (beeps on Android)</option>
             <option value="picovoice">Picovoice (needs AccessKey and .ppn file)</option>
             <option value="off">Off (tap the Milly button to talk)</option>
           </select></label>
           <div id="wake-status" class="muted"></div>
-          <p class="muted">Built-in listening works with no account. Picovoice is optional and only used if you add both items below. See SETUP.md.</p>
+          <p class="muted">Chrome listening needs no account, but Android beeps every time it restarts listening and a web page can't turn that beep off. Picovoice is quiet and only listens for the exact phrase, but needs an approved account. See SETUP.md.</p>
           <label>Picovoice AccessKey<input id="set-pv-key" type="password" autocomplete="off" placeholder="Paste AccessKey"></label>
           <label>Wake word file (.ppn for Web)<input id="set-ppn" type="file" accept=".ppn"></label>
           <div id="set-ppn-status" class="muted"></div>
