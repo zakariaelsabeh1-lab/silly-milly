@@ -79,7 +79,7 @@ Good to know:
 
 ## Daily use
 
-- **Morning**: on school and daycare days (Monday to Friday) at 7:00 AM the screen switches to the morning checklist and Milly says good morning with a kindness reminder. At 7:30 she says what's left, and at 8:00 it's time to go. Noah's list ends with "Ready for school", Didi's with "Ready for daycare". It has its own **History**. Change times or tasks in the `morning` part of the CONFIG block in `public/app.js`.
+- **Morning**: on school and daycare days (Monday to Friday) at 7:00 AM the screen switches to the morning checklist and Milly says good morning with a kindness reminder. At 7:20 she says what's left, and at 7:30 it's time to leave the house. Noah's list ends with "Ready for school", Didi's with "Ready for daycare". It has its own **History**. Change times or tasks in the `morning` part of the CONFIG block in `public/app.js`.
 - **Kindness reminder**: a short line about being kind, good manners and listening to parents and teachers shows on the morning and bedtime screens (a different one each day) and Milly says it at 7:00 AM and 8:00 PM.
 - **Bedtime**: at 7:30 PM the screen switches to the bedtime checklist and Milly announces it. At 7:45 she says what each child still has to do. At 8:00 she calls stories. When a list is finished, there's a celebration. **History** shows the last 14 days, with Noah's puffer in its own highlighted column. You can also ask: "Hey Silly Milly, did Noah do his puffer last night?"
 - **Calendar**: tap a day to see it, **+ Add event** to add one, tap an event to edit or delete it. Or by voice: "Hey Silly Milly, add Didi's dentist appointment next Tuesday at 3:30." Repeating events (weekly swimming, yearly birthdays) are supported.

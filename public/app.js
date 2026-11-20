@@ -35,19 +35,24 @@
     },
     morning: {
       start: "07:00",    // switch to the morning screen (school and daycare days, Mon-Fri)
-      remind: "07:30",   // spoken reminder
-      leave: "08:00",    // time to go
-      showUntil: "09:00",
+      remind: "07:20",   // spoken reminder
+      leave: "07:30",    // leave the house
+      showUntil: "08:30",
       weekdaysOnly: true, // auto-show and speak only Monday to Friday
       tasks: [
         { id: "toilet", label: "Use the toilet", icon: "🚽" },
         { id: "puffer", label: "Puffer", icon: "💨", only: ["noah"] },
         { id: "vitamins", label: "Vitamins", icon: "💊" },
         { id: "teeth", label: "Brush teeth", icon: "🦷" },
-        { id: "dressed", label: "Put clothes on", icon: "👕" },
+        { id: "dressed", label: "Get dressed", icon: "👕" },
         { id: "breakfast", label: "Eat breakfast", icon: "🥣" },
         { id: "ready", label: "Ready to go", icon: "🎒", labels: { noah: "Ready for school", didi: "Ready for daycare" }, icons: { didi: "🧸" } }
-      ]
+      ],
+      // Each kid's own order (task ids). Tasks not listed go at the end.
+      order: {
+        noah: ["breakfast", "vitamins", "toilet", "dressed", "puffer", "teeth", "ready"],
+        didi: ["toilet", "breakfast", "vitamins", "dressed", "teeth", "ready"]
+      }
     },
     // Kind-heart reminders, shown on the morning and bedtime screens and said out loud. One per day.
     values: {
@@ -234,10 +239,10 @@
         say("Good morning " + kidNames() + "! Time to get ready. " + valuesLine("morning"));
       } else if (m === mo.remind) {
         showView("morning"); chime();
-        say("Half an hour until it's time to go! " + whatsLeftSentence("morning"));
+        say(minutesUntil(mo.leave) + " minutes until we leave the house! " + whatsLeftSentence("morning"));
       } else if (m === mo.leave) {
         showView("morning"); chime();
-        say("Time to go! Noah, off to school. Didi, off to daycare. Have a great day, and remember your good manners!");
+        say("Time to leave the house! Shoes and coats on. Noah, off to school. Didi, off to daycare. Have a great day, and remember your good manners!");
       }
     }
     updateBedStatus();
@@ -477,7 +482,7 @@
     var when;
     if (name === "morning") {
       if (t < mo.start) when = "Starts at " + to12(mo.start);
-      else if (t < mo.leave) when = "Time to go at " + to12(mo.leave) + " · " + minutesUntil(mo.leave) + " min";
+      else if (t < mo.leave) when = "Leave the house at " + to12(mo.leave) + " · " + minutesUntil(mo.leave) + " min";
       else when = "Have a great day! ☀️";
     } else if (t >= "05:00" && t < bt.start) {
       var m = minutesUntil(bt.start), hh = Math.floor(m / 60), mm = m % 60;
@@ -513,9 +518,15 @@
   var historyRoutine = "bedtime";
   var COLS = { bedtime: "bed-columns", morning: "morning-columns" };
   function tasksFor(kid, name) {
-    return CONFIG[name || "bedtime"].tasks.filter(function (t) { return !t.only || t.only.indexOf(kid.id) >= 0; }).map(function (t) {
+    var r = CONFIG[name || "bedtime"], order = r.order && r.order[kid.id];
+    var list = r.tasks.filter(function (t) { return !t.only || t.only.indexOf(kid.id) >= 0; }).map(function (t) {
       return { id: t.id, label: (t.labels && t.labels[kid.id]) || t.label, icon: (t.icons && t.icons[kid.id]) || t.icon };
     });
+    if (order) {
+      var pos = function (t) { var i = order.indexOf(t.id); return i < 0 ? 99 : i; };
+      list.sort(function (a, b) { return pos(a) - pos(b); });
+    }
+    return list;
   }
   function kidNames() { return CONFIG.kids.map(function (k) { return k.name; }).join(" and "); }
   function leftFor(kid, name) {
@@ -589,12 +600,12 @@
       t >= bt.bed ? 2 : t >= bt.remind ? 1 : t >= bt.start ? 0 : -1);
     var m;
     if (t < mo.start) m = "Getting ready starts at " + to12(mo.start);
-    else if (t < mo.remind) m = "Let's get ready! " + minutesUntil(mo.leave) + " minutes until it's time to go";
+    else if (t < mo.remind) m = "Let's get ready! We leave the house at " + to12(mo.leave) + " (" + minutesUntil(mo.leave) + " min)";
     else if (t < mo.leave) m = "Hurry hurry! " + minutesUntil(mo.leave) + " minutes left";
     else if (t < "12:00") m = "Off to school and daycare! 🚗";
     else m = "See you tomorrow morning!";
     $("morning-status").textContent = m;
-    pills("morning-times", [short12(mo.start) + " Get ready", short12(mo.remind) + " Reminder", short12(mo.leave) + " Time to go 🚗"],
+    pills("morning-times", [short12(mo.start) + " Get ready", short12(mo.remind) + " Reminder", short12(mo.leave) + " Leave the house 🚗"],
       t >= "12:00" ? -1 : t >= mo.leave ? 2 : t >= mo.remind ? 1 : t >= mo.start ? 0 : -1);
   }
   function minutesUntil(t) {
