@@ -89,6 +89,10 @@
         <div class="bed-times" id="morning-times"></div>
         <button id="morning-history-btn" class="ghost-btn">History</button>
       </div>
+      <div id="morning-timer" class="morning-timer hidden">
+        <div class="timer-track"><div id="timer-bar" class="timer-bar"></div></div>
+        <div class="timer-read"><span id="timer-text" class="timer-text"></span> <span id="timer-label" class="timer-label"></span></div>
+      </div>
       <div id="morning-values" class="values-banner"></div>
       <div id="morning-columns" class="bed-columns"></div>
     </section>
@@ -175,6 +179,25 @@
           <p class="muted">Higher wakes more easily, but also by mistake. Lower means fewer false wakes. Watch the bar below while you say it.</p>
           <div class="wake-meter"><div id="wake-meter-bar"></div></div>
           <div id="wake-meter-text" class="muted"></div>
+        </div>
+        <div class="set-card">
+          <h3>Morning times ☀️</h3>
+          <p class="muted">School and daycare days (Monday to Friday):</p>
+          <div class="time-row">
+            <label>Get ready<input id="set-mt-start" type="time"></label>
+            <label>Reminder<input id="set-mt-remind" type="time"></label>
+            <label>Leave the house<input id="set-mt-leave" type="time"></label>
+          </div>
+          <p class="muted">Weekends are slower: no countdown, no star challenge, and no shoes or school items on the list.</p>
+          <div class="time-row">
+            <label>Weekend morning starts<input id="set-mt-weekend" type="time"></label>
+          </div>
+          <div id="set-mt-msg" class="muted"></div>
+        </div>
+        <div class="set-card">
+          <h3>Star challenge this week ⭐</h3>
+          <p class="muted">The kids win a star each school day when their whole list is ticked before leave time. A star every day this week wins the 🎁 surprise. Late because of something they couldn't help (sick, snow, car trouble)? Tap the day to give the star back, or mark a day off. Tap again to undo.</p>
+          <div id="star-admin" class="star-admin"></div>
         </div>
         <div class="set-card">
           <h3>Time zone</h3>
