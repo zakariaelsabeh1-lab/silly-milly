@@ -30,29 +30,40 @@
         { id: "vitamins", label: "Vitamins", icon: "💊" },
         { id: "teeth", label: "Brush teeth", icon: "🦷" },
         { id: "jammies", label: "Jammies on", icon: "👕" },
+        { id: "hair", label: "Brush hair", icon: "🎀", only: ["didi"] },
         { id: "ready", label: "Ready for tomorrow", icon: "🎒" }
       ]
     },
     morning: {
-      start: "07:00",    // switch to the morning screen (school and daycare days, Mon-Fri)
-      remind: "07:20",   // spoken reminder
-      leave: "07:30",    // leave the house
-      showUntil: "08:30",
-      weekdaysOnly: true, // auto-show and speak only Monday to Friday
+      // School and daycare days (Mon-Fri). These four times can also be changed in ⚙️ Settings.
+      weekday: { start: "07:00", remind: "07:20", leave: "07:30", showUntil: "08:30" },
+      // Weekends are slow: no countdown, no leave-the-house alert, no star challenge.
+      weekend: { start: "08:30", showUntil: "11:00" },
       tasks: [
         { id: "toilet", label: "Use the toilet", icon: "🚽" },
         { id: "puffer", label: "Puffer", icon: "💨", only: ["noah"] },
         { id: "vitamins", label: "Vitamins", icon: "💊" },
         { id: "teeth", label: "Brush teeth", icon: "🦷" },
         { id: "dressed", label: "Get dressed", icon: "👕" },
+        { id: "hair", label: "Brush hair", icon: "🎀", only: ["didi"] },
         { id: "breakfast", label: "Eat breakfast", icon: "🥣" },
-        { id: "ready", label: "Ready to go", icon: "🎒", labels: { noah: "Ready for school", didi: "Ready for daycare" }, icons: { didi: "🧸" } }
+        { id: "downstairs", label: "Go downstairs", icon: "🪜", weekdays: true },
+        { id: "shoes", label: "Put your shoes on", icon: "👟", weekdays: true },
+        { id: "ready", label: "Ready to go", icon: "🎒", weekdays: true, labels: { noah: "Ready for school", didi: "Ready for daycare" }, icons: { didi: "🧸" } }
       ],
       // Each kid's own order (task ids). Tasks not listed go at the end.
+      // "weekdays: true" tasks only show Monday to Friday.
       order: {
-        noah: ["breakfast", "vitamins", "toilet", "dressed", "puffer", "teeth", "ready"],
-        didi: ["toilet", "breakfast", "vitamins", "dressed", "teeth", "ready"]
+        noah: ["breakfast", "vitamins", "toilet", "dressed", "puffer", "teeth", "downstairs", "shoes", "ready"],
+        didi: ["toilet", "breakfast", "vitamins", "dressed", "hair", "teeth", "downstairs", "shoes", "ready"]
       }
+    },
+    // Weekday star challenge: a star when every morning task is ticked by leave time,
+    // a broken heart if not. Enough stars Monday to Friday earns the weekly surprise.
+    // Sick days and holidays can be marked "day off" in ⚙️ Settings (they count as a star).
+    challenge: {
+      on: true,
+      need: 5 // stars needed out of 5 school days (5 = every day on time)
     },
     // Kind-heart reminders, shown on the morning and bedtime screens and said out loud. One per day.
     values: {
@@ -196,11 +207,25 @@
     if (name === "settings") renderSettings();
     if (name === "news") loadNews();
   }
-  function morningDay() { var d = now().getDay(); return !CONFIG.morning.weekdaysOnly || (d >= 1 && d <= 5); }
+  function isSchoolDay(d) { var w = (d || now()).getDay(); return w >= 1 && w <= 5; }
+  function addMin(t, n) { var p = t.split(":"), x = (+p[0] * 60 + +p[1] + n + 1440) % 1440; return pad(Math.floor(x / 60)) + ":" + pad(x % 60); }
+  function validTime(t) { return typeof t === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(t); }
+  // Today's morning schedule: school days (Mon-Fri) or the slower weekend one, with ⚙️ Settings changes.
+  function morningTimes(d) {
+    var mt = (settings && settings.morningTimes) || {}, c = CONFIG.morning;
+    var pick = function (k, def) { return validTime(mt[k]) ? mt[k] : def; };
+    if (isSchoolDay(d)) {
+      var o = { school: true, start: pick("start", c.weekday.start), remind: pick("remind", c.weekday.remind), leave: pick("leave", c.weekday.leave) };
+      o.showUntil = o.leave > addMin(c.weekday.showUntil, -60) ? addMin(o.leave, 60) : c.weekday.showUntil;
+      return o;
+    }
+    var ws = pick("weekendStart", c.weekend.start);
+    return { school: false, start: ws, showUntil: ws === c.weekend.start ? c.weekend.showUntil : addMin(ws, 150) };
+  }
   function defaultView() {
-    var t = hm(now());
+    var t = hm(now()), mo = morningTimes();
     if (between(t, CONFIG.bedtime.start, CONFIG.bedtime.showUntil)) return "bedtime";
-    if (morningDay() && between(t, CONFIG.morning.start, CONFIG.morning.showUntil)) return "morning";
+    if (between(t, mo.start, mo.showUntil)) return "morning";
     return "home";
   }
 
@@ -214,6 +239,7 @@
     $("dim-clock").textContent = h + ":" + pad(d.getMinutes());
     var m = hm(d);
     if (m !== lastMinute) { lastMinute = m; everyMinute(d, m); }
+    if (currentView === "morning") updateTimer();
   }
 
   var lastTouch = Date.now();
@@ -231,22 +257,21 @@
       showView("bedtime"); chime();
       say("It's eight o'clock. Into bed for stories! " + valuesLine("bedtime") + " Good night " + kidNames() + ".");
     }
-    // Morning schedule (school and daycare days)
-    var mo = CONFIG.morning;
-    if (morningDay()) {
-      if (m === mo.start) {
-        showView("morning"); chime();
-        say("Good morning " + kidNames() + "! Time to get ready. " + valuesLine("morning"));
-      } else if (m === mo.remind) {
-        showView("morning"); chime();
-        say(minutesUntil(mo.leave) + " minutes until we leave the house! " + whatsLeftSentence("morning"));
-      } else if (m === mo.leave) {
-        showView("morning"); chime();
-        say("Time to leave the house! Shoes and coats on. Noah, off to school. Didi, off to daycare. Have a great day, and remember your good manners!");
-      }
+    // Morning schedule: school days have a countdown and the star challenge, weekends are slow.
+    var mo = morningTimes();
+    if (m === mo.start) {
+      showView("morning"); chime();
+      say(mo.school
+        ? "Good morning " + kidNames() + "! Time to get ready. The timer is on, let's win a star! " + valuesLine("morning")
+        : "Good morning " + kidNames() + "! Happy " + DAYS_LONG[d.getDay()] + ". No rush today, here's your morning list. " + valuesLine("morning"));
+    } else if (mo.school && m === mo.remind) {
+      showView("morning"); chime();
+      say(minutesUntil(mo.leave) + " minutes until we leave the house! " + whatsLeftSentence("morning"));
+    } else if (mo.school && m === mo.leave) {
+      showView("morning"); chime(); renderBedtime();
+      say("Time to leave the house! Noah, off to school. Didi, off to daycare. " + starSentence() + " Have a great day, and remember your good manners!");
     }
-    updateBedStatus();
-    renderHomeBed();
+    renderBedtime(); // also turns today's ⏳ into a star result once leave time passes
     updateGreeting(d);
     // New day: refresh
     if (m === "00:01") { loadWeather(); loadUpcoming(); loadToday(); }
@@ -475,13 +500,14 @@
   function renderHomeBed() {
     var box = $("home-bed"); if (!box) return;
     box.innerHTML = "";
-    var t = hm(now()), bt = CONFIG.bedtime, mo = CONFIG.morning;
-    var name = morningDay() && t >= "05:00" && t < "12:00" ? "morning" : "bedtime";
+    var t = hm(now()), bt = CONFIG.bedtime, mo = morningTimes();
+    var name = t >= "05:00" && t < "12:00" ? "morning" : "bedtime";
     $("routine-tile").setAttribute("data-go", name);
     $("routine-tile-title").textContent = name === "morning" ? "Morning routine" : "Bedtime tonight";
     var when;
     if (name === "morning") {
-      if (t < mo.start) when = "Starts at " + to12(mo.start);
+      if (!mo.school) when = t < mo.start ? "Slow morning · starts at " + to12(mo.start) : "Weekend morning, no rush 😊";
+      else if (t < mo.start) when = "Starts at " + to12(mo.start);
       else if (t < mo.leave) when = "Leave the house at " + to12(mo.leave) + " · " + minutesUntil(mo.leave) + " min";
       else when = "Have a great day! ☀️";
     } else if (t >= "05:00" && t < bt.start) {
@@ -517,9 +543,13 @@
   var celebrated = {};
   var historyRoutine = "bedtime";
   var COLS = { bedtime: "bed-columns", morning: "morning-columns" };
-  function tasksFor(kid, name) {
+  // school: true/false picks the school-day or weekend morning list (default: today).
+  function tasksFor(kid, name, school) {
     var r = CONFIG[name || "bedtime"], order = r.order && r.order[kid.id];
-    var list = r.tasks.filter(function (t) { return !t.only || t.only.indexOf(kid.id) >= 0; }).map(function (t) {
+    if (school === undefined) school = isSchoolDay();
+    var list = r.tasks.filter(function (t) {
+      return (!t.only || t.only.indexOf(kid.id) >= 0) && (!t.weekdays || school);
+    }).map(function (t) {
       return { id: t.id, label: (t.labels && t.labels[kid.id]) || t.label, icon: (t.icons && t.icons[kid.id]) || t.icon };
     });
     if (order) {
@@ -550,7 +580,8 @@
   function loadToday() {
     var key = ymd(now());
     return Promise.all(["bedtime", "morning"].map(function (name) {
-      return api("/api/bedtime?days=1&routine=" + name).then(function (r) {
+      return api("/api/bedtime?days=" + (name === "morning" ? 7 : 1) + "&routine=" + name).then(function (r) {
+        if (name === "morning") morningWeek = r.days || {};
         state[name] = (r.days && r.days[key]) || {};
         CONFIG.kids.forEach(function (k) { if (!leftFor(k, name).length) celebrated[name + key + k.id] = true; });
       });
@@ -567,6 +598,7 @@
       if (count === tasks.length) col.classList.add("all-done");
       var head = el("div", "kid-head");
       head.appendChild(el("div", "kid-name", kid.name));
+      if (name === "morning" && CONFIG.challenge.on && isSchoolDay()) head.appendChild(starRow(kid));
       head.appendChild(el("div", "kid-count", count === tasks.length ? "All done! ⭐" : count + " / " + tasks.length));
       col.appendChild(head);
       tasks.forEach(function (t) {
@@ -599,6 +631,13 @@
     pills("bedtime-times", [short12(bt.start) + " Get ready", short12(bt.remind) + " Reminder", short12(bt.bed) + " Stories 📚"],
       t >= bt.bed ? 2 : t >= bt.remind ? 1 : t >= bt.start ? 0 : -1);
     var m;
+    mo = morningTimes();
+    if (!mo.school) {
+      $("morning-status").textContent = "Happy " + DAYS_LONG[now().getDay()] + "! Slow morning, no rush 😊";
+      pills("morning-times", [short12(mo.start) + " Good morning", "No school today 🏡"], t >= mo.start && t < "12:00" ? 0 : -1);
+      updateTimer();
+      return;
+    }
     if (t < mo.start) m = "Getting ready starts at " + to12(mo.start);
     else if (t < mo.remind) m = "Let's get ready! We leave the house at " + to12(mo.leave) + " (" + minutesUntil(mo.leave) + " min)";
     else if (t < mo.leave) m = "Hurry hurry! " + minutesUntil(mo.leave) + " minutes left";
@@ -607,7 +646,87 @@
     $("morning-status").textContent = m;
     pills("morning-times", [short12(mo.start) + " Get ready", short12(mo.remind) + " Reminder", short12(mo.leave) + " Leave the house 🚗"],
       t >= "12:00" ? -1 : t >= mo.leave ? 2 : t >= mo.remind ? 1 : t >= mo.start ? 0 : -1);
+    updateTimer();
   }
+
+  // ---------- countdown timer (school days, get ready → leave the house) ----------
+  function updateTimer() {
+    var box = $("morning-timer"); if (!box) return;
+    var mo = morningTimes(), n = now();
+    var secs = function (t) { var p = t.split(":"); return +p[0] * 3600 + +p[1] * 60; };
+    var nowS = n.getHours() * 3600 + n.getMinutes() * 60 + n.getSeconds();
+    if (!mo.school || nowS < secs(mo.start) || nowS >= secs(mo.leave) + 60) { box.classList.add("hidden"); return; }
+    box.classList.remove("hidden");
+    var left = Math.max(0, secs(mo.leave) - nowS), total = secs(mo.leave) - secs(mo.start) || 1;
+    var pct = Math.min(100, left / total * 100);
+    box.className = "morning-timer " + (left > 600 ? "ok" : left > 300 ? "soon" : "hurry");
+    $("timer-bar").style.width = pct.toFixed(1) + "%";
+    $("timer-text").textContent = left ? Math.floor(left / 60) + ":" + pad(left % 60) : "Time to go! 🚗";
+    $("timer-label").textContent = left ? "until we leave the house" : "";
+  }
+
+  // ---------- weekly star challenge (school days) ----------
+  // A star when every morning task is ticked by leave time. Parents can give a star back,
+  // or mark a sick day / holiday as a day off, in ⚙️ Settings.
+  var morningWeek = {}; // { "2026-11-23": { noah: {toilet:"07:05"}, didi: {...} } } for the last 7 days
+  function weekDates() {
+    var d = now(), mon = addDays(d, -((d.getDay() + 6) % 7)), out = [];
+    for (var i = 0; i < 5; i++) out.push(addDays(mon, i));
+    return out;
+  }
+  function overrideFor(key, kid) {
+    var o = settings && settings.starOverrides && settings.starOverrides[key];
+    return (o && o[kid.id]) || "";
+  }
+  // "star", "off" (day off, counts as a star), "missed", "pending" (today, still time) or "future"
+  function dayResult(kid, d) {
+    var key = ymd(d), today = ymd(now()), ov = overrideFor(key, kid);
+    if (ov === "star" || ov === "off") return ov;
+    if (ov === "missed") return "missed";
+    if (key > today) return "future";
+    var leave = morningTimes(d).leave;
+    var done = key === today ? (state.morning[kid.id] || {}) : ((morningWeek[key] || {})[kid.id] || {});
+    var onTime = tasksFor(kid, "morning", true).every(function (t) { return done[t.id] && done[t.id] <= leave; });
+    if (onTime) return "star";
+    if (key < today || hm(now()) > leave) return "missed";
+    return "pending";
+  }
+  function weekSummary(kid) {
+    var days = weekDates().map(function (d) { return { d: d, r: dayResult(kid, d) }; });
+    var stars = days.filter(function (x) { return x.r === "star" || x.r === "off"; }).length;
+    var missed = days.filter(function (x) { return x.r === "missed"; }).length;
+    return { days: days, stars: stars, missed: missed, won: stars >= CONFIG.challenge.need, open: 5 - missed >= CONFIG.challenge.need };
+  }
+  var STAR_ICON = { star: "⭐", off: "🏖️", missed: "☆", pending: "⏳", future: "·" };
+  function starRow(kid) {
+    var w = weekSummary(kid), row = el("div", "star-row"), today = ymd(now());
+    w.days.forEach(function (x) {
+      var cell = el("div", "star-day " + x.r + (ymd(x.d) === today ? " today" : ""));
+      cell.appendChild(el("span", "star-ico", STAR_ICON[x.r]));
+      cell.appendChild(el("span", "star-lbl", DAYS[x.d.getDay()].charAt(0)));
+      row.appendChild(cell);
+    });
+    var need = CONFIG.challenge.need - w.stars;
+    row.appendChild(el("div", "star-goal" + (w.won ? " won" : ""),
+      w.won ? "🎁 Surprise won!" : w.open ? "🎁 " + need + " more ⭐" : "🎁 New try Monday!"));
+    return row;
+  }
+  // Said at leave time: cheerful either way.
+  function starSentence() {
+    if (!CONFIG.challenge.on) return "";
+    var got = [], notYet = [], won = [];
+    CONFIG.kids.forEach(function (k) {
+      var r = dayResult(k, now());
+      if (r === "star" || r === "off") got.push(k.name); else notYet.push(k.name);
+      if (isFriday() && weekSummary(k).won) won.push(k.name);
+    });
+    var out = "";
+    if (got.length) out += got.join(" and ") + (got.length > 1 ? " each" : "") + " won a star today! ";
+    if (notYet.length) out += "No star today for " + notYet.join(" and ") + ", but that's okay. " + (isFriday() ? "New challenge on Monday!" : "Let's get it tomorrow!") + " ";
+    if (won.length) out += "And " + won.join(" and ") + (won.length > 1 ? " have" : " has") + " won the weekly surprise! ";
+    return out.trim();
+  }
+  function isFriday() { return now().getDay() === 5; }
   function minutesUntil(t) {
     var n = now(), p = t.split(":");
     return (+p[0] * 60 + +p[1]) - (n.getHours() * 60 + n.getMinutes());
@@ -623,9 +742,17 @@
       .catch(function () { /* will resync on next load */ });
     if (on && !leftFor(kid, name).length && !celebrated[name + key + kid.id]) {
       celebrated[name + key + kid.id] = true;
-      if (name === "morning") {
+      if (name === "morning" && !isSchoolDay()) {
+        celebrate(kid.name + " is all done! 🎉", "Great job, " + kid.name + "! Your morning list is all done.");
+      } else if (name === "morning") {
         var place = kid.id === "didi" ? "daycare" : "school";
-        celebrate(kid.name + " is ready for " + place + "! 🎉", kid.name + " is all ready for " + place + "! Awesome job, " + kid.name + "! Have a great day.");
+        var r = CONFIG.challenge.on ? dayResult(kid, now()) : "";
+        if (r === "star" && isFriday() && weekSummary(kid).won)
+          celebrate("🎁 " + kid.name + " won the weekly surprise! 🎉", "Wow, " + kid.name + "! You were ready on time all week. You won the weekly surprise!");
+        else if (r === "star")
+          celebrate(kid.name + " is ready for " + place + "! ⭐", kid.name + " is all ready for " + place + ", and that's a star! Awesome job, " + kid.name + ".");
+        else
+          celebrate(kid.name + " is ready for " + place + "! 🎉", kid.name + " is all ready for " + place + "! Awesome job, " + kid.name + "! Have a great day.");
       } else celebrate(kid.name + " is ready for bed! 🎉", kid.name + " is all done! Amazing job, " + kid.name + "!");
     }
   }
@@ -638,7 +765,7 @@
       thead.appendChild(el("th", null, "Day"));
       var cols = [];
       CONFIG.kids.forEach(function (k) {
-        tasksFor(k, name).forEach(function (t) { cols.push({ kid: k, task: t }); });
+        tasksFor(k, name, true).forEach(function (t) { cols.push({ kid: k, task: t }); });
       });
       cols.forEach(function (c) {
         var th = el("th", c.task.id === "puffer" ? "puffer-col" : null, c.kid.name + " " + c.task.icon);
@@ -1260,6 +1387,11 @@
       var o = el("option", null, v.name + " (" + v.lang + ")"); o.value = v.name; if (v.name === settings.voiceName) o.selected = true; sel.appendChild(o);
     });
     $("set-tz").value = settings.timeZone || "";
+    var wd = morningTimes(addDays(now(), (8 - now().getDay()) % 7 || 7)), mt = settings.morningTimes || {};
+    $("set-mt-start").value = wd.start; $("set-mt-remind").value = wd.remind; $("set-mt-leave").value = wd.leave;
+    $("set-mt-weekend").value = validTime(mt.weekendStart) ? mt.weekendStart : CONFIG.morning.weekend.start;
+    $("set-mt-msg").textContent = "";
+    renderStarAdmin();
     $("set-tz-now").textContent = "The app's clock says " + to12(hm(now())) + ". The tablet's own time zone is " + (deviceTz() || "unknown") + ".";
     $("set-status").innerHTML = "";
     [
@@ -1270,8 +1402,43 @@
     ].forEach(function (r) { $("set-status").appendChild(el("div", null, r[0] + ": " + r[1])); });
     updateWakeBadge();
   }
+  // Parents' star fixes: auto → give the star → day off → auto
+  var OVERRIDE_NEXT = { "": "star", star: "off", off: "" };
+  function renderStarAdmin() {
+    var box = $("star-admin"); if (!box) return;
+    box.innerHTML = "";
+    var today = ymd(now());
+    CONFIG.kids.forEach(function (kid) {
+      var row = el("div", "star-admin-row");
+      row.appendChild(el("div", "star-admin-name", kid.name));
+      weekDates().forEach(function (d) {
+        var key = ymd(d), ov = overrideFor(key, kid), r = dayResult(kid, d);
+        var b = el("button", "star-admin-day" + (ov ? " set" : ""));
+        b.appendChild(el("span", "star-ico", STAR_ICON[r]));
+        b.appendChild(el("span", "star-lbl", DAYS[d.getDay()] + (ov === "star" ? " · given" : ov === "off" ? " · day off" : "")));
+        b.onclick = function () {
+          var next = OVERRIDE_NEXT[ov] || "";
+          if (key > today && next === "star") next = "off"; // future days: only "day off"
+          b.disabled = true;
+          api("/api/settings", { method: "POST", body: { starOverride: { date: key, kid: kid.id, value: next } } })
+            .then(loadSettings).then(function () { renderStarAdmin(); renderBedtime(); })
+            .catch(function (e) { b.disabled = false; $("set-mt-msg").textContent = "Couldn't save the star: " + e.message; });
+        };
+        row.appendChild(b);
+      });
+      var w = weekSummary(kid);
+      row.appendChild(el("div", "star-admin-sum", w.won ? "🎁 won" : w.stars + " / " + CONFIG.challenge.need));
+      box.appendChild(row);
+    });
+  }
   function saveSettings() {
+    var mt = { start: $("set-mt-start").value, remind: $("set-mt-remind").value, leave: $("set-mt-leave").value, weekendStart: $("set-mt-weekend").value };
+    if (!(validTime(mt.start) && validTime(mt.remind) && validTime(mt.leave) && validTime(mt.weekendStart)) || !(mt.start < mt.remind && mt.remind < mt.leave)) {
+      $("set-mt-msg").textContent = "Morning times need to go in order: get ready, then reminder, then leave the house.";
+      return;
+    }
     var body = {
+      morningTimes: mt,
       wakeSens: parseInt($("set-sens").value, 10),
       voiceName: $("set-voice").value,
       timeZone: $("set-tz").value,
@@ -1353,6 +1520,7 @@
       var de = document.documentElement;
       if (de.requestFullscreen && !document.fullscreenElement) de.requestFullscreen().catch(function () {});
       loadSettings().then(function () {
+        showView(defaultView()); // morning times may come from ⚙️ Settings
         loadToday(); loadUpcoming();
         startWake();
       });
