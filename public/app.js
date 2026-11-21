@@ -30,8 +30,8 @@
         { id: "vitamins", label: "Vitamins", icon: "💊" },
         { id: "teeth", label: "Brush teeth", icon: "🦷" },
         { id: "jammies", label: "Jammies on", icon: "👕" },
-        { id: "hair", label: "Brush hair", icon: "🎀", only: ["didi"] },
-        { id: "ready", label: "Ready for tomorrow", icon: "🎒" }
+        { id: "ready", label: "Ready for tomorrow", icon: "🎒" },
+        { id: "hair", label: "Brush hair", icon: "🎀", only: ["didi"] }
       ]
     },
     morning: {
@@ -54,8 +54,8 @@
       // Each kid's own order (task ids). Tasks not listed go at the end.
       // "weekdays: true" tasks only show Monday to Friday.
       order: {
-        noah: ["breakfast", "vitamins", "toilet", "dressed", "puffer", "teeth", "downstairs", "shoes", "ready"],
-        didi: ["toilet", "breakfast", "vitamins", "dressed", "hair", "teeth", "downstairs", "shoes", "ready"]
+        noah: ["breakfast", "vitamins", "toilet", "dressed", "puffer", "teeth", "ready", "downstairs", "shoes"],
+        didi: ["toilet", "breakfast", "vitamins", "dressed", "hair", "teeth", "ready", "downstairs", "shoes"]
       }
     },
     // Weekday star challenge: a star when every morning task is ticked by leave time,

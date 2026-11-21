@@ -79,7 +79,7 @@ Good to know:
 
 ## Daily use
 
-- **Morning, school days (Mon to Fri)**: at 7:00 AM the screen switches to the morning checklist, a countdown bar runs to leave time, Milly says what's left at 7:20, and at 7:30 it's time to leave the house. The lists end with "Go downstairs", "Put your shoes on" and "Ready for school" (Noah) or "Ready for daycare" (Didi). Didi also has "Brush hair".
+- **Morning, school days (Mon to Fri)**: at 7:00 AM the screen switches to the morning checklist, a countdown bar runs to leave time, Milly says what's left at 7:20, and at 7:30 it's time to leave the house. The lists end with "Ready for school" (Noah) or "Ready for daycare" (Didi), then "Go downstairs" and "Put your shoes on" last. Didi also has "Brush hair" (and it's her last step at bedtime).
 - **Morning, weekends**: a slower list (no downstairs, shoes or school items, no countdown, no stars). It starts at 8:30 AM by default.
 - **Change the times** in ⚙️ Settings, under "Morning times". Change the tasks in the `morning` part of the CONFIG block in `public/app.js`.
 - **Star challenge**: each school day a kid wins a ⭐ when their whole list is ticked by leave time. A star every day Monday to Friday wins the 🎁 weekly surprise (Milly announces it Friday). A missed day just shows an empty ☆ and "let's get it tomorrow". Parents can give a star back or mark a sick day or holiday as a day off in ⚙️ Settings, under "Star challenge this week". To make it easier (say 4 of 5 days), change `challenge.need` in CONFIG.
