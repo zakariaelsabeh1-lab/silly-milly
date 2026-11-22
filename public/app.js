@@ -222,10 +222,15 @@
     var ws = pick("weekendStart", c.weekend.start);
     return { school: false, start: ws, showUntil: ws === c.weekend.start ? c.weekend.showUntil : addMin(ws, 150) };
   }
+  function allDone(name) {
+    return CONFIG.kids.every(function (k) { return !leftFor(k, name).length; });
+  }
+  function routineView(name) { if (!allDone(name)) showView(name); }
   function defaultView() {
     var t = hm(now()), mo = morningTimes();
-    if (between(t, CONFIG.bedtime.start, CONFIG.bedtime.showUntil)) return "bedtime";
-    if (between(t, mo.start, mo.showUntil)) return "morning";
+    // Once everyone has finished a list, the tablet goes back to the main screen.
+    if (between(t, CONFIG.bedtime.start, CONFIG.bedtime.showUntil) && !allDone("bedtime")) return "bedtime";
+    if (between(t, mo.start, mo.showUntil) && !allDone("morning")) return "morning";
     return "home";
   }
 
@@ -248,27 +253,27 @@
     // Bedtime schedule
     var bt = CONFIG.bedtime;
     if (m === bt.start) {
-      showView("bedtime"); chime();
+      routineView("bedtime"); chime();
       say("Time to get ready for bed, " + kidNames() + "! Let's do the checklist.");
     } else if (m === bt.remind) {
-      showView("bedtime"); chime();
+      routineView("bedtime"); chime();
       say("Fifteen minutes until bed! " + whatsLeftSentence("bedtime"));
     } else if (m === bt.bed) {
-      showView("bedtime"); chime();
+      routineView("bedtime"); chime();
       say("It's eight o'clock. Into bed for stories! " + valuesLine("bedtime") + " Good night " + kidNames() + ".");
     }
     // Morning schedule: school days have a countdown and the star challenge, weekends are slow.
     var mo = morningTimes();
     if (m === mo.start) {
-      showView("morning"); chime();
+      routineView("morning"); chime();
       say(mo.school
         ? "Good morning " + kidNames() + "! Time to get ready. The timer is on, let's win a star! " + valuesLine("morning")
         : "Good morning " + kidNames() + "! Happy " + DAYS_LONG[d.getDay()] + ". No rush today, here's your morning list. " + valuesLine("morning"));
     } else if (mo.school && m === mo.remind) {
-      showView("morning"); chime();
+      routineView("morning"); chime();
       say(minutesUntil(mo.leave) + " minutes until we leave the house! " + whatsLeftSentence("morning"));
     } else if (mo.school && m === mo.leave) {
-      showView("morning"); chime(); renderBedtime();
+      routineView("morning"); chime(); renderBedtime();
       say("Time to leave the house! Noah, off to school. Didi, off to daycare. " + starSentence() + " Have a great day, and remember your good manners!");
     }
     renderBedtime(); // also turns today's ⏳ into a star result once leave time passes
